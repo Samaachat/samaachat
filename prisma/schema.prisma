@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @unique
+  password  String?
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  category    String
+  unit        String
+  image       String?
+  createdAt   DateTime @default(now())
+
+  campaigns Campaign[]
+}
+
+model Campaign {
+  id              Int            @id @default(autoincrement())
+  productId       Int
+  targetQuantity  Int
+  currentQuantity Int            @default(0)
+  startDate       DateTime
+  endDate         DateTime
+  status          CampaignStatus @default(ACTIVE)
+  createdAt       DateTime       @default(now())
+
+  product    Product     @relation(fields: [productId], references: [id])
+  priceTiers PriceTier[]
+  orders     Order[]
+  orderItems OrderItem[]
+}
+
+model PriceTier {
+  id          Int @id @default(autoincrement())
+  campaignId  Int
+  minQuantity Int
+  maxQuantity Int
+  price       Int
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+}
+
+model Order {
+  id             Int         @id @default(autoincrement())
+  userId         Int
+  campaignId     Int
+  quantity       Int
+  unitPrice      Int         @default(13250)
+  finalUnitPrice Int?
+  amount         Int
+  finalAmount    Int?
+  status         OrderStatus @default(PENDING)
+  createdAt      DateTime    @default(now())
+
+  user     User        @relation(fields: [userId], references: [id])
+  campaign Campaign    @relation(fields: [campaignId], references: [id])
+  payment  Payment?
+  delivery Delivery?
+  items    OrderItem[]
+}
+
+model OrderItem {
+  id         Int @id @default(autoincrement())
+  orderId    Int
+  campaignId Int
+  quantity   Int
+  unitPrice  Int
+  amount     Int
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+}
+
+model Payment {
+  id        Int           @id @default(autoincrement())
+  orderId   Int           @unique
+  amount    Int
+  provider  String
+  status    PaymentStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+model Delivery {
+  id           Int            @id @default(autoincrement())
+  orderId      Int            @unique
+  address      String
+  deliveryDate DateTime?
+  status       DeliveryStatus @default(PENDING)
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+  SUPPLIER
+}
+
+enum CampaignStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  DELIVERED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum DeliveryStatus {
+  PENDING
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+}

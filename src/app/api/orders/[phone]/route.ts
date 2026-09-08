@@ -36,25 +36,37 @@ export async function GET(
       },
     });
 
+    const ordersWithPayment = await Promise.all(
+      orders.map(async (order) => {
+        const payment = await prisma.payment.findUnique({
+          where: {
+            orderId: order.id,
+          },
+        });
+
+        return {
+          id: order.id,
+          product: order.campaign.product.name,
+          quantity: order.quantity,
+          unitPrice: order.unitPrice,
+          amount: order.amount,
+          finalUnitPrice: order.finalUnitPrice,
+          finalAmount: order.finalAmount,
+          status: order.status,
+          paymentStatus: payment?.status ?? "PENDING",
+          createdAt: order.createdAt,
+        };
+      })
+    );
+
     return NextResponse.json({
-      orders: orders.map((order) => ({
-        id: order.id,
-        product: order.campaign.product.name,
-        quantity: order.quantity,
-        unitPrice: order.unitPrice,
-        amount: order.amount,
-        finalUnitPrice: order.finalUnitPrice,
-        finalAmount: order.finalAmount,
-        status: order.status,
-        paymentStatus: "PENDING",
-        createdAt: order.createdAt,
-      })),
+      orders: ordersWithPayment,
     });
   } catch (error) {
     console.error("Erreur récupération commandes :", error);
 
     return NextResponse.json(
-      { error: "Une erreur est survenue."  },
+      { error: "Une erreur est survenue." },
       { status: 500 }
     );
   }

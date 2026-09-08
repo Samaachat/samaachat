@@ -15,13 +15,21 @@ function safeEqual(a: string, b: string) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const formData = await request.formData();
+
+    const body = Object.fromEntries(formData.entries());
+
+    console.log("IPN PayTech reçu :", {
+      type_event: body.type_event,
+      ref_command: body.ref_command,
+      item_price: body.item_price,
+    });
 
     const typeEvent = String(body.type_event ?? "");
     const refCommand = String(body.ref_command ?? "");
 
     const itemPrice = Number(
-      body.final_item_price ?? body.item_price ?? 0
+      body.item_price ?? body.final_item_price ?? 0
     );
 
     const receivedHmac = String(body.hmac_compute ?? "");
@@ -37,12 +45,14 @@ export async function POST(request: Request) {
       });
     }
 
-    // ---------------------------------------------------------
-    // 1. Vérification de l'authenticité PayTech
-    // ---------------------------------------------------------
-
     let authenticated = false;
 
+    /*
+     * Vérification HMAC-SHA256 recommandée par PayTech.
+     *
+     * Message :
+     * montant|ref_command|api_key
+     */
     if (receivedHmac) {
       const message = `${itemPrice}|${refCommand}|${apiKey}`;
 
@@ -57,7 +67,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fallback SHA-256 documenté par PayTech
+    /*
+     * Vérification alternative avec les hash SHA256
+     * des clés API.
+     */
     if (!authenticated) {
       const receivedApiKeyHash = String(
         body.api_key_sha256 ?? ""
@@ -98,10 +111,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // ---------------------------------------------------------
-    // 2. Vérification de l'événement
-    // ---------------------------------------------------------
-
     if (
       typeEvent !== "sale_complete" &&
       typeEvent !== "sale_canceled"
@@ -115,10 +124,6 @@ export async function POST(request: Request) {
         status: 200,
       });
     }
-
-    // ---------------------------------------------------------
-    // 3. Vérification de la référence
-    // ---------------------------------------------------------
 
     const prefix = "SAMA-ORDER-";
 
@@ -143,10 +148,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // ---------------------------------------------------------
-    // 4. Recherche de la commande
-    // ---------------------------------------------------------
-
     const order = await prisma.order.findUnique({
       where: {
         id: orderId,
@@ -167,25 +168,20 @@ export async function POST(request: Request) {
       });
     }
 
-    // ---------------------------------------------------------
-    // 5. Vérification du montant
-    // ---------------------------------------------------------
-
     if (itemPrice !== order.amount) {
-      console.error("Montant PayTech incorrect :", {
-        orderId,
-        expected: order.amount,
-        received: itemPrice,
-      });
+      console.error(
+        "Montant PayTech incorrect :",
+        {
+          orderId,
+          expected: order.amount,
+          received: itemPrice,
+        }
+      );
 
       return new NextResponse("Invalid amount", {
         status: 400,
       });
     }
-
-    // ---------------------------------------------------------
-    // 6. PAIEMENT DÉJÀ CONFIRMÉ
-    // ---------------------------------------------------------
 
     if (order.payment?.status === "PAID") {
       console.log(
@@ -196,10 +192,6 @@ export async function POST(request: Request) {
         status: 200,
       });
     }
-
-    // ---------------------------------------------------------
-    // 7. PAIEMENT RÉUSSI
-    // ---------------------------------------------------------
 
     if (typeEvent === "sale_complete") {
       await prisma.$transaction(async (tx) => {
@@ -239,10 +231,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // ---------------------------------------------------------
-    // 8. PAIEMENT ANNULÉ
-    // ---------------------------------------------------------
-
     if (typeEvent === "sale_canceled") {
       await prisma.payment.upsert({
         where: {
@@ -274,16 +262,10 @@ export async function POST(request: Request) {
       status: 200,
     });
   } catch (error) {
-    console.error(
-      "Erreur IPN PayTech :",
-      error
-    );
+    console.error("Erreur IPN PayTech :", error);
 
-    return new NextResponse(
-      "Internal Server Error",
-      {
-        status: 500,
-      }
-    );
+    return new NextResponse("Internal Server Error", {
+      status: 500,
+    });
   }
 }

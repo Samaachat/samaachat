@@ -2,13 +2,16 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+
 export const dynamic = "force-dynamic";
+
 function ConfirmationContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
+  const paymentResult = searchParams.get("payment");
 
   const [loading, setLoading] = useState(false);
-  const [paid, setPaid] = useState(false);
+  const [paid, setPaid] = useState(paymentResult === "success");
   const [error, setError] = useState("");
 
   async function handlePayment() {
@@ -28,18 +31,24 @@ function ConfirmationContent() {
         },
         body: JSON.stringify({
           orderId: Number(orderId),
-          provider: "TEST",
+          provider: "PAYTECH",
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error ?? "Le paiement a échoué.");
+        setError(data.error ?? "Impossible de démarrer le paiement.");
         return;
       }
 
-      setPaid(true);
+      if (!data.redirectUrl) {
+        setError("PayTech n'a pas fourni de lien de paiement.");
+        return;
+      }
+
+      // Redirection vers la page sécurisée PayTech.
+      window.location.href = data.redirectUrl;
     } catch {
       setError("Impossible de contacter le serveur.");
     } finally {
@@ -64,7 +73,7 @@ function ConfirmationContent() {
           </div>
 
           <p className="mt-6 text-sm font-bold text-green-700">
-            {paid ? "PAIEMENT CONFIRMÉ" : "PARTICIPATION ENREGISTRÉE"}
+            {paid ? "PAIEMENT EN COURS DE CONFIRMATION" : "PARTICIPATION ENREGISTRÉE"}
           </p>
 
           <h1 className="mt-2 text-3xl font-black md:text-4xl">
@@ -75,7 +84,7 @@ function ConfirmationContent() {
 
           <p className="mx-auto mt-4 max-w-lg leading-7 text-slate-500">
             {paid
-              ? "Votre paiement a bien été enregistré. Votre commande est maintenant confirmée."
+              ? "Votre retour depuis PayTech a bien été reçu. La confirmation définitive de votre paiement sera effectuée automatiquement."
               : "Votre participation à la campagne de riz a bien été prise en compte."}
           </p>
 
@@ -100,11 +109,13 @@ function ConfirmationContent() {
               <span
                 className={
                   paid
-                    ? "font-bold text-green-700"
+                    ? "font-bold text-yellow-700"
                     : "font-bold text-yellow-700"
                 }
               >
-                {paid ? "Paiement confirmé" : "En attente de paiement"}
+                {paid
+                  ? "Paiement en cours de confirmation"
+                  : "En attente de paiement"}
               </span>
             </div>
           </div>
@@ -116,11 +127,26 @@ function ConfirmationContent() {
                 disabled={loading}
                 className="w-full rounded-2xl bg-green-700 px-6 py-4 text-lg font-black text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Paiement en cours..." : "Payer maintenant"}
+                {loading
+                  ? "Connexion à PayTech..."
+                  : "Payer maintenant"}
               </button>
 
               <p className="mt-3 text-xs text-slate-400">
-                Mode de paiement de test — aucun argent réel n'est débité.
+                Paiement sécurisé par PayTech.
+              </p>
+            </div>
+          )}
+
+          {paid && (
+            <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-5">
+              <p className="text-sm font-bold text-green-800">
+                Votre paiement est en cours de vérification.
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-green-700">
+                Vous pouvez consulter le statut de votre commande dans votre
+                espace commandes.
               </p>
             </div>
           )}
@@ -128,18 +154,6 @@ function ConfirmationContent() {
           {error && (
             <div className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">
               {error}
-            </div>
-          )}
-
-          {paid && (
-            <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-5">
-              <p className="text-sm font-bold text-green-800">
-                Votre commande est confirmée.
-              </p>
-              <p className="mt-2 text-sm leading-6 text-green-700">
-                Nous pourrons ensuite ajouter les informations de livraison
-                et les vrais moyens de paiement.
-              </p>
             </div>
           )}
 

@@ -44,6 +44,10 @@ export default function Home() {
     loadCampaigns();
   }, []);
 
+  function addToCart(campaignId: number) {
+    window.location.href = `/rejoindre?campaignId=${campaignId}`;
+  }
+
   return (
     <main className="min-h-screen bg-white text-gray-900">
       <header className="border-b">
@@ -58,12 +62,21 @@ export default function Home() {
             </p>
           </div>
 
-          <Link
-            href="/commandes"
-            className="rounded-full bg-green-800 px-5 py-2.5 font-semibold text-white"
-          >
-            Mes commandes
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/rejoindre"
+              className="rounded-full border border-green-800 px-5 py-2.5 font-semibold text-green-800 hover:bg-green-50"
+            >
+              🛒 Panier
+            </Link>
+
+            <Link
+              href="/commandes"
+              className="rounded-full bg-green-800 px-5 py-2.5 font-semibold text-white"
+            >
+              Mes commandes
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -83,6 +96,15 @@ export default function Home() {
             Plus nous sommes nombreux, plus le prix baisse.
             Rejoignez un groupe et économisez sur vos achats essentiels.
           </p>
+
+          <div className="mt-8">
+            <Link
+              href="/rejoindre"
+              className="inline-block rounded-2xl bg-yellow-400 px-6 py-4 font-black text-slate-900 hover:bg-yellow-300"
+            >
+              🛒 Voir tous les produits
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -96,6 +118,10 @@ export default function Home() {
             <h2 className="mt-2 text-3xl font-bold text-green-950">
               Produits disponibles
             </h2>
+
+            <p className="mt-2 text-gray-600">
+              Ajoutez plusieurs produits à votre panier et passez une seule commande.
+            </p>
           </div>
 
           {loading ? (
@@ -205,12 +231,13 @@ export default function Home() {
                       )}
 
                       <div className="mt-8">
-                        <Link
-                          href="/rejoindre"
-                          className="block rounded-2xl bg-green-800 px-6 py-4 text-center font-bold text-white hover:bg-green-900"
+                        <button
+                          type="button"
+                          onClick={() => addToCart(campaign.id)}
+                          className="w-full rounded-2xl bg-green-800 px-6 py-4 text-center font-bold text-white hover:bg-green-900"
                         >
-                          Rejoindre le groupe
-                        </Link>
+                          🛒 Ajouter au panier
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -234,7 +261,7 @@ export default function Home() {
               <h3 className="mt-4 font-bold">Choisissez</h3>
 
               <p className="mt-2 text-gray-600">
-                Choisissez le produit dont vous avez besoin.
+                Ajoutez les produits dont vous avez besoin à votre panier.
               </p>
             </div>
 
@@ -242,7 +269,7 @@ export default function Home() {
               <div className="text-3xl">2️⃣</div>
 
               <h3 className="mt-4 font-bold">
-                Rejoignez le groupe
+                Achetez ensemble
               </h3>
 
               <p className="mt-2 text-gray-600">

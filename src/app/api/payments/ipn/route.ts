@@ -19,6 +19,7 @@ export async function POST(request: Request) {
 
     const typeEvent = String(body.type_event ?? "");
     const refCommand = String(body.ref_command ?? "");
+
     const itemPrice = Number(
       body.final_item_price ?? body.item_price ?? 0
     );
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
 
     if (!apiKey || !apiSecret) {
       console.error("Variables PayTech manquantes.");
+
       return new NextResponse("Configuration error", {
         status: 500,
       });
@@ -41,7 +43,6 @@ export async function POST(request: Request) {
 
     let authenticated = false;
 
-    // Méthode recommandée : HMAC-SHA256
     if (receivedHmac) {
       const message = `${itemPrice}|${refCommand}|${apiKey}`;
 
@@ -50,10 +51,13 @@ export async function POST(request: Request) {
         .update(message)
         .digest("hex");
 
-      authenticated = safeEqual(expectedHmac, receivedHmac);
+      authenticated = safeEqual(
+        expectedHmac,
+        receivedHmac
+      );
     }
 
-    // Méthode alternative : SHA256 des clés
+    // Fallback SHA-256 documenté par PayTech
     if (!authenticated) {
       const receivedApiKeyHash = String(
         body.api_key_sha256 ?? ""
@@ -74,12 +78,20 @@ export async function POST(request: Request) {
         .digest("hex");
 
       authenticated =
-        safeEqual(expectedApiKeyHash, receivedApiKeyHash) &&
-        safeEqual(expectedApiSecretHash, receivedApiSecretHash);
+        safeEqual(
+          expectedApiKeyHash,
+          receivedApiKeyHash
+        ) &&
+        safeEqual(
+          expectedApiSecretHash,
+          receivedApiSecretHash
+        );
     }
 
     if (!authenticated) {
-      console.error("IPN PayTech rejeté : authentification invalide.");
+      console.error(
+        "IPN PayTech rejeté : authentification invalide."
+      );
 
       return new NextResponse("Forbidden", {
         status: 403,
@@ -94,7 +106,10 @@ export async function POST(request: Request) {
       typeEvent !== "sale_complete" &&
       typeEvent !== "sale_canceled"
     ) {
-      console.log("Événement PayTech ignoré :", typeEvent);
+      console.log(
+        "Événement PayTech ignoré :",
+        typeEvent
+      );
 
       return new NextResponse("OK", {
         status: 200,
@@ -105,7 +120,9 @@ export async function POST(request: Request) {
     // 3. Vérification de la référence
     // ---------------------------------------------------------
 
-    if (!refCommand.startsWith("SAMA-ORDER-")) {
+    const prefix = "SAMA-ORDER-";
+
+    if (!refCommand.startsWith(prefix)) {
       console.error(
         "Référence PayTech invalide :",
         refCommand
@@ -117,7 +134,7 @@ export async function POST(request: Request) {
     }
 
     const orderId = Number(
-      refCommand.replace("SAMA-ORDER-", "")
+      refCommand.substring(prefix.length)
     );
 
     if (!Number.isInteger(orderId) || orderId < 1) {
@@ -141,7 +158,7 @@ export async function POST(request: Request) {
 
     if (!order) {
       console.error(
-        "Commande introuvable pour IPN PayTech :",
+        "Commande introuvable :",
         orderId
       );
 
@@ -155,7 +172,7 @@ export async function POST(request: Request) {
     // ---------------------------------------------------------
 
     if (itemPrice !== order.amount) {
-      console.error("Montant PayTech différent :", {
+      console.error("Montant PayTech incorrect :", {
         orderId,
         expected: order.amount,
         received: itemPrice,
@@ -167,7 +184,21 @@ export async function POST(request: Request) {
     }
 
     // ---------------------------------------------------------
-    // 6. Paiement réussi
+    // 6. PAIEMENT DÉJÀ CONFIRMÉ
+    // ---------------------------------------------------------
+
+    if (order.payment?.status === "PAID") {
+      console.log(
+        `Commande #${order.id} déjà payée. IPN ignoré.`
+      );
+
+      return new NextResponse("OK", {
+        status: 200,
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 7. PAIEMENT RÉUSSI
     // ---------------------------------------------------------
 
     if (typeEvent === "sale_complete") {
@@ -200,7 +231,7 @@ export async function POST(request: Request) {
       });
 
       console.log(
-        `Paiement PayTech confirmé pour la commande #${order.id}`
+        `Paiement PayTech confirmé : commande #${order.id}`
       );
 
       return new NextResponse("OK", {
@@ -209,7 +240,7 @@ export async function POST(request: Request) {
     }
 
     // ---------------------------------------------------------
-    // 7. Paiement annulé
+    // 8. PAIEMENT ANNULÉ
     // ---------------------------------------------------------
 
     if (typeEvent === "sale_canceled") {
@@ -231,7 +262,7 @@ export async function POST(request: Request) {
       });
 
       console.log(
-        `Paiement PayTech annulé pour la commande #${order.id}`
+        `Paiement PayTech annulé : commande #${order.id}`
       );
 
       return new NextResponse("OK", {
@@ -243,10 +274,16 @@ export async function POST(request: Request) {
       status: 200,
     });
   } catch (error) {
-    console.error("Erreur IPN PayTech :", error);
+    console.error(
+      "Erreur IPN PayTech :",
+      error
+    );
 
-    return new NextResponse("Internal Server Error", {
-      status: 500,
-    });
+    return new NextResponse(
+      "Internal Server Error",
+      {
+        status: 500,
+      }
+    );
   }
 }

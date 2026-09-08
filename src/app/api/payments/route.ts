@@ -220,15 +220,31 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      paymentId: payment.id,
-      orderId: order.id,
-      amount: order.amount,
-      status: "PENDING",
-      redirectUrl: paytechData.redirect_url,
-      token: paytechData.token,
-    });
+    const redirectUrl =
+  paytechData.redirect_url ?? paytechData.redirectUrl;
+
+if (!redirectUrl) {
+  console.error("Réponse PayTech sans URL de paiement :", paytechData);
+
+  return NextResponse.json(
+    {
+      error:
+        paytechData.message ??
+        "PayTech n'a pas fourni de lien de paiement.",
+    },
+    { status: 502 }
+  );
+}
+
+return NextResponse.json({
+  success: true,
+  paymentId: payment.id,
+  orderId: order.id,
+  amount: order.amount,
+  status: "PENDING",
+  redirectUrl,
+  token: paytechData.token,
+});
   } catch (error) {
     console.error("Erreur paiement :", error);
 

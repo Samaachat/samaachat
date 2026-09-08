@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 type Campaign = {
   id: number;
@@ -36,7 +36,6 @@ export default function RejoindrePage() {
   const [error, setError] = useState("");
 
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     async function loadCampaigns() {
@@ -52,7 +51,9 @@ export default function RejoindrePage() {
 
         setCampaigns(loadedCampaigns);
 
-        const campaignIdParam = searchParams.get("campaignId");
+        // Récupère le produit envoyé depuis la page d'accueil
+        const params = new URLSearchParams(window.location.search);
+        const campaignIdParam = params.get("campaignId");
 
         if (campaignIdParam) {
           const campaignId = Number(campaignIdParam);
@@ -82,7 +83,7 @@ export default function RejoindrePage() {
     }
 
     loadCampaigns();
-  }, [searchParams]);
+  }, []);
 
   function getPrice(campaign: Campaign, quantity: number) {
     const tier = campaign.priceTiers.find(
@@ -96,12 +97,16 @@ export default function RejoindrePage() {
 
   function getQuantity(campaignId: number) {
     return (
-      selected.find((item) => item.campaignId === campaignId)
-        ?.quantity ?? 0
+      selected.find(
+        (item) => item.campaignId === campaignId
+      )?.quantity ?? 0
     );
   }
 
-  function updateQuantity(campaign: Campaign, quantity: number) {
+  function updateQuantity(
+    campaign: Campaign,
+    quantity: number
+  ) {
     const safeQuantity = Math.max(0, quantity);
 
     if (safeQuantity === 0) {
@@ -110,6 +115,7 @@ export default function RejoindrePage() {
           (item) => item.campaignId !== campaign.id
         )
       );
+
       return;
     }
 
@@ -144,17 +150,14 @@ export default function RejoindrePage() {
   }
 
   const total = selected.reduce(
-    (sum, item) => sum + item.quantity * item.price,
+    (sum, item) =>
+      sum + item.quantity * item.price,
     0
   );
 
   const totalItems = selected.reduce(
     (sum, item) => sum + item.quantity,
     0
-  );
-
-  const selectedProducts = campaigns.filter((campaign) =>
-    selected.some((item) => item.campaignId === campaign.id)
   );
 
   async function handleSubmit() {
@@ -173,7 +176,9 @@ export default function RejoindrePage() {
     }
 
     if (!address.trim()) {
-      setError("Veuillez renseigner votre adresse de livraison.");
+      setError(
+        "Veuillez renseigner votre adresse de livraison."
+      );
       return;
     }
 
@@ -196,13 +201,19 @@ export default function RejoindrePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Une erreur est survenue.");
+        setError(
+          data.error || "Une erreur est survenue."
+        );
         return;
       }
 
-      router.push(`/confirmation?orderId=${data.orderId}`);
+      router.push(
+        `/confirmation?orderId=${data.orderId}`
+      );
     } catch {
-      setError("Impossible de contacter le serveur.");
+      setError(
+        "Impossible de contacter le serveur."
+      );
     } finally {
       setLoading(false);
     }
@@ -255,18 +266,20 @@ export default function RejoindrePage() {
             <div className="mt-8 space-y-5">
               {campaigns.map((campaign) => {
                 const quantity = getQuantity(campaign.id);
+
                 const price = getPrice(
                   campaign,
                   quantity || 1
                 );
-                const productTotal = quantity * price;
-                const isSelected = quantity > 0;
+
+                const productTotal =
+                  quantity * price;
 
                 return (
                   <div
                     key={campaign.id}
                     className={`rounded-3xl bg-white p-6 shadow-lg ${
-                      isSelected
+                      quantity > 0
                         ? "ring-2 ring-green-500"
                         : ""
                     }`}
@@ -336,14 +349,16 @@ export default function RejoindrePage() {
                       </div>
                     </div>
 
-                    {isSelected && (
+                    {quantity > 0 && (
                       <div className="mt-5 border-t border-slate-100 pt-4 text-right">
                         <span className="text-sm text-slate-500">
                           Sous-total :{" "}
                         </span>
 
                         <span className="text-lg font-black text-green-700">
-                          {productTotal.toLocaleString("fr-FR")} FCFA
+                          {productTotal.toLocaleString(
+                            "fr-FR"
+                          )} FCFA
                         </span>
                       </div>
                     )}
@@ -360,9 +375,10 @@ export default function RejoindrePage() {
 
                 <div className="mt-4 space-y-3">
                   {selected.map((item) => {
-                    const campaign = selectedProducts.find(
+                    const campaign = campaigns.find(
                       (campaign) =>
-                        campaign.id === item.campaignId
+                        campaign.id ===
+                        item.campaignId
                     );
 
                     if (!campaign) {
@@ -381,13 +397,16 @@ export default function RejoindrePage() {
 
                           <p className="text-sm text-slate-500">
                             {item.quantity} ×{" "}
-                            {item.price.toLocaleString("fr-FR")} FCFA
+                            {item.price.toLocaleString(
+                              "fr-FR"
+                            )} FCFA
                           </p>
                         </div>
 
                         <p className="font-black text-green-700">
                           {(
-                            item.quantity * item.price
+                            item.quantity *
+                            item.price
                           ).toLocaleString("fr-FR")}{" "}
                           FCFA
                         </p>
@@ -403,7 +422,9 @@ export default function RejoindrePage() {
                   </span>
 
                   <span className="text-2xl font-black text-green-700">
-                    {total.toLocaleString("fr-FR")} FCFA
+                    {total.toLocaleString(
+                      "fr-FR"
+                    )} FCFA
                   </span>
                 </div>
               </div>
@@ -425,7 +446,9 @@ export default function RejoindrePage() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) =>
+                  setName(e.target.value)
+                }
                 placeholder="Ex : Mamadou Ndiaye"
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-green-600"
               />
@@ -439,7 +462,9 @@ export default function RejoindrePage() {
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) =>
+                  setPhone(e.target.value)
+                }
                 placeholder="Ex : 77 123 45 67"
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-green-600"
               />
@@ -452,7 +477,9 @@ export default function RejoindrePage() {
 
               <textarea
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(e) =>
+                  setAddress(e.target.value)
+                }
                 placeholder="Ex : Parcelles Assainies, Unité 15, près de..."
                 rows={3}
                 className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-green-600"
@@ -474,7 +501,9 @@ export default function RejoindrePage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={loading || campaignLoading}
+          disabled={
+            loading || campaignLoading
+          }
           className="mt-6 w-full rounded-2xl bg-yellow-400 px-6 py-4 text-lg font-black text-slate-900 hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading

@@ -1,14 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-const PAYTECH_API_URL = "https://paytech.sn/api/payment/request-payment";
+const PAYTECH_API_URL =
+  "https://paytech.sn/api/payment/request-payment";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
     const orderId = Number(body.orderId);
-    const provider = String(body.provider ?? "TEST").trim().toUpperCase();
+    const provider = String(body.provider ?? "TEST")
+      .trim()
+      .toUpperCase();
+
+    // ---------------------------------------------------------
+    // 1. Vérification de la commande
+    // ---------------------------------------------------------
 
     if (!Number.isInteger(orderId) || orderId < 1) {
       return NextResponse.json(
@@ -66,8 +73,9 @@ export async function POST(request: Request) {
     }
 
     // ---------------------------------------------------------
-    // PAIEMENT DE TEST
+    // 2. PAIEMENT TEST SAMAACHAT
     // ---------------------------------------------------------
+
     if (provider === "TEST") {
       const result = await prisma.$transaction(async (tx) => {
         const payment = await tx.payment.upsert({
@@ -113,8 +121,9 @@ export async function POST(request: Request) {
     }
 
     // ---------------------------------------------------------
-    // PAIEMENT PAYTECH
+    // 3. VÉRIFICATION DU PROVIDER
     // ---------------------------------------------------------
+
     if (provider !== "PAYTECH") {
       return NextResponse.json(
         {
@@ -124,9 +133,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // ---------------------------------------------------------
+    // 4. VARIABLES PAYTECH
+    // ---------------------------------------------------------
+
     const apiKey = process.env.PAYTECH_API_KEY;
     const apiSecret = process.env.PAYTECH_API_SECRET;
     const environment = process.env.PAYTECH_ENV || "test";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
     if (!apiKey || !apiSecret) {
       console.error("Variables PayTech manquantes.");
@@ -139,29 +153,42 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Comme nous ne stockons pas encore la référence PayTech
-     * dans Payment, nous utilisons une référence déterministe
-     * basée sur l'identifiant de la commande.
-     *
-     * Exemple : SAMA-ORDER-1
-     */
+    if (!baseUrl) {
+      console.error("NEXT_PUBLIC_APP_URL manquante.");
+
+      return NextResponse.json(
+        {
+          error: "L'URL du site n'est pas configurée.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ---------------------------------------------------------
+    // 5. RÉFÉRENCE UNIQUE PAYTECH
+    // ---------------------------------------------------------
+
     const refCommand = `SAMA-ORDER-${order.id}`;
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    // ---------------------------------------------------------
+    // 6. DONNÉES ENVOYÉES À PAYTECH
+    // ---------------------------------------------------------
 
     const paymentPayload = {
       item_name: order.campaign.product.name,
       item_price: order.amount,
+      currency: "XOF",
       ref_command: refCommand,
       command_name: `Commande SamaAchat #${order.id}`,
-      currency: "XOF",
       env: environment,
 
       ipn_url: `${baseUrl}/api/payments/ipn`,
-      success_url: `${baseUrl}/confirmation?orderId=${order.id}&payment=success`,
-      cancel_url: `${baseUrl}/confirmation?orderId=${order.id}&payment=cancelled`,
+
+      success_url:
+        `${baseUrl}/confirmation?orderId=${order.id}&payment=success`,
+
+      cancel_url:
+        `${baseUrl}/confirmation?orderId=${order.id}&payment=cancelled`,
 
       custom_field: JSON.stringify({
         orderId: order.id,
@@ -174,11 +201,17 @@ export async function POST(request: Request) {
       amount: order.amount,
       refCommand,
       environment,
+      ipnUrl: paymentPayload.ipn_url,
     });
+
+    // ---------------------------------------------------------
+    // 7. APPEL SERVEUR PAYTECH
+    // ---------------------------------------------------------
 
     const paytechResponse = await fetch(PAYTECH_API_URL, {
       method: "POST",
       headers: {
+        Accept: "application/json",
         "Content-Type": "application/json",
         API_KEY: apiKey,
         API_SECRET: apiSecret,
@@ -186,23 +219,93 @@ export async function POST(request: Request) {
       body: JSON.stringify(paymentPayload),
     });
 
-    const paytechData = await paytechResponse.json();
+    const responseText = await paytechResponse.text();
 
-    if (!paytechResponse.ok || !paytechData.success) {
-      console.error("Erreur PayTech :", paytechData);
+    console.log("Réponse HTTP PayTech :", {
+      status: paytechResponse.status,
+      body: responseText,
+    });
+
+    let paytechData: Record<string, unknown>;
+
+    try {
+      paytechData = JSON.parse(responseText);
+    } catch {
+      console.error(
+        "PayTech a retourné une réponse non JSON :",
+        responseText
+      );
 
       return NextResponse.json(
         {
-          error:
-            paytechData.message ||
-            "Impossible de créer le paiement PayTech.",
+          error: "Réponse invalide de PayTech.",
         },
         { status: 502 }
       );
     }
 
-    // On crée seulement un paiement PENDING.
-    // La confirmation réelle sera faite par l'IPN PayTech.
+    // ---------------------------------------------------------
+    // 8. VÉRIFICATION DE LA RÉPONSE PAYTECH
+    // ---------------------------------------------------------
+
+    const paytechSuccess =
+      paytechData.success === 1 ||
+      paytechData.success === "1" ||
+      paytechData.success === true;
+
+    if (!paytechResponse.ok || !paytechSuccess) {
+      console.error("PayTech a refusé le paiement :", paytechData);
+
+      const message =
+        typeof paytechData.message === "string"
+          ? paytechData.message
+          : typeof paytechData.error === "string"
+            ? paytechData.error
+            : "Impossible de créer le paiement PayTech.";
+
+      return NextResponse.json(
+        {
+          error: message,
+        },
+        { status: 502 }
+      );
+    }
+
+    // ---------------------------------------------------------
+    // 9. RÉCUPÉRATION DU LIEN PAYTECH
+    // ---------------------------------------------------------
+
+    const redirectUrl =
+      typeof paytechData.redirect_url === "string"
+        ? paytechData.redirect_url
+        : typeof paytechData.redirectUrl === "string"
+          ? paytechData.redirectUrl
+          : "";
+
+    const token =
+      typeof paytechData.token === "string"
+        ? paytechData.token
+        : "";
+
+    if (!redirectUrl) {
+      console.error(
+        "PayTech a accepté la demande mais aucun lien n'a été retourné :",
+        paytechData
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "PayTech a accepté la demande mais n'a pas fourni de lien de paiement.",
+        },
+        { status: 502 }
+      );
+    }
+
+    // ---------------------------------------------------------
+    // 10. ENREGISTREMENT DU PAIEMENT EN ATTENTE
+    // ---------------------------------------------------------
+
     const payment = await prisma.payment.upsert({
       where: {
         orderId: order.id,
@@ -220,36 +323,26 @@ export async function POST(request: Request) {
       },
     });
 
-    const redirectUrl =
-  paytechData.redirect_url ?? paytechData.redirectUrl;
+    // ---------------------------------------------------------
+    // 11. RÉPONSE À SAMAACHAT
+    // ---------------------------------------------------------
 
-if (!redirectUrl) {
-  console.error("Réponse PayTech sans URL de paiement :", paytechData);
-
-  return NextResponse.json(
-    {
-      error:
-        paytechData.message ??
-        "PayTech n'a pas fourni de lien de paiement.",
-    },
-    { status: 502 }
-  );
-}
-
-return NextResponse.json({
-  success: true,
-  paymentId: payment.id,
-  orderId: order.id,
-  amount: order.amount,
-  status: "PENDING",
-  redirectUrl,
-  token: paytechData.token,
-});
+    return NextResponse.json({
+      success: true,
+      paymentId: payment.id,
+      orderId: order.id,
+      amount: order.amount,
+      status: "PENDING",
+      redirectUrl,
+      token,
+    });
   } catch (error) {
     console.error("Erreur paiement :", error);
 
     return NextResponse.json(
-      { error: "Une erreur est survenue." },
+      {
+        error: "Une erreur est survenue.",
+      },
       { status: 500 }
     );
   }

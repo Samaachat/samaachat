@@ -1,8 +1,48 @@
-import Link from "next/link";
-import { getActiveCampaigns } from "@/lib/campaign";
+"use client";
 
-export default async function Home() {
-  const campaigns = await getActiveCampaigns();
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+type Campaign = {
+  id: number;
+  currentQuantity: number;
+  targetQuantity: number;
+  product: {
+    name: string;
+    description: string | null;
+  };
+  priceTiers: {
+    id: number;
+    minQuantity: number;
+    maxQuantity: number;
+    price: number;
+  }[];
+};
+
+export default function Home() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadCampaigns() {
+      try {
+        const response = await fetch("/api/campaigns");
+
+        if (!response.ok) {
+          throw new Error("Impossible de charger les campagnes.");
+        }
+
+        const data = await response.json();
+        setCampaigns(data.campaigns ?? []);
+      } catch (error) {
+        console.error("Erreur chargement campagnes :", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCampaigns();
+  }, []);
 
   return (
     <main className="min-h-screen bg-white text-gray-900">
@@ -12,6 +52,7 @@ export default async function Home() {
             <h1 className="text-2xl font-bold text-green-900">
               SamaAchat
             </h1>
+
             <p className="text-sm text-gray-500">
               Achetez ensemble. Payez moins.
             </p>
@@ -57,11 +98,18 @@ export default async function Home() {
             </h2>
           </div>
 
-          {campaigns.length === 0 ? (
+          {loading ? (
+            <div className="rounded-3xl border bg-white p-8 text-center shadow-sm">
+              <p className="font-bold text-gray-700">
+                Chargement des campagnes...
+              </p>
+            </div>
+          ) : campaigns.length === 0 ? (
             <div className="rounded-3xl border bg-white p-8 text-center shadow-sm">
               <p className="font-bold text-gray-700">
                 Aucune campagne active pour le moment.
               </p>
+
               <p className="mt-2 text-gray-500">
                 Revenez bientôt pour découvrir nos prochaines offres.
               </p>
@@ -182,7 +230,9 @@ export default async function Home() {
           <div className="mt-8 grid gap-5 md:grid-cols-3">
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="text-3xl">1️⃣</div>
+
               <h3 className="mt-4 font-bold">Choisissez</h3>
+
               <p className="mt-2 text-gray-600">
                 Choisissez le produit dont vous avez besoin.
               </p>
@@ -190,7 +240,11 @@ export default async function Home() {
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="text-3xl">2️⃣</div>
-              <h3 className="mt-4 font-bold">Rejoignez le groupe</h3>
+
+              <h3 className="mt-4 font-bold">
+                Rejoignez le groupe
+              </h3>
+
               <p className="mt-2 text-gray-600">
                 Plus de participants permettent d'obtenir un meilleur prix.
               </p>
@@ -198,7 +252,9 @@ export default async function Home() {
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="text-3xl">3️⃣</div>
+
               <h3 className="mt-4 font-bold">Économisez</h3>
+
               <p className="mt-2 text-gray-600">
                 Le prix final dépend du volume atteint.
               </p>

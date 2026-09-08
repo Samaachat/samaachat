@@ -1,10 +1,9 @@
-
 "use client";
 
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-
-export default function ConfirmationPage() {
+export const dynamic = "force-dynamic";
+function ConfirmationContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
 
@@ -69,7 +68,9 @@ export default function ConfirmationPage() {
           </p>
 
           <h1 className="mt-2 text-3xl font-black md:text-4xl">
-            {paid ? "Merci pour votre paiement !" : "Merci pour votre commande !"}
+            {paid
+              ? "Merci pour votre paiement !"
+              : "Merci pour votre commande !"}
           </h1>
 
           <p className="mx-auto mt-4 max-w-lg leading-7 text-slate-500">
@@ -151,5 +152,13 @@ export default function ConfirmationPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ConfirmationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <ConfirmationContent />
+    </Suspense>
   );
 }

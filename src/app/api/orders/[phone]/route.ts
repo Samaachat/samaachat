@@ -1,4 +1,3 @@
-
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -31,7 +30,6 @@ export async function GET(
             product: true,
           },
         },
-        payment: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -48,7 +46,7 @@ export async function GET(
         finalUnitPrice: order.finalUnitPrice,
         finalAmount: order.finalAmount,
         status: order.status,
-        paymentStatus: order.payment?.status ?? "PENDING",
+        paymentStatus: "PENDING",
         createdAt: order.createdAt,
       })),
     });
@@ -56,7 +54,7 @@ export async function GET(
     console.error("Erreur récupération commandes :", error);
 
     return NextResponse.json(
-      { error: "Une erreur est survenue." },
+      { error: "Une erreur est survenue."  },
       { status: 500 }
     );
   }

@@ -7,6 +7,24 @@ export const dynamic = "force-dynamic";
 
 type PaymentStatus = "PENDING" | "PAID" | "FAILED";
 
+type OrderItem = {
+  campaignId: number;
+  product: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+};
+
+type Order = {
+  id: number;
+  amount: number;
+  finalAmount: number | null;
+  status: string;
+  paymentStatus: PaymentStatus;
+  items: OrderItem[];
+};
+
 function ConfirmationContent() {
   const searchParams = useSearchParams();
 
@@ -17,7 +35,38 @@ function ConfirmationContent() {
   const [checking, setChecking] = useState(false);
   const [paymentStatus, setPaymentStatus] =
     useState<PaymentStatus>("PENDING");
+  const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState("");
+
+  async function loadOrder() {
+    if (!orderId) {
+      setError("Commande introuvable.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/orders/${orderId}`,
+        {
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(
+          data.error ?? "Impossible de récupérer la commande."
+        );
+        return;
+      }
+
+      setOrder(data);
+      setPaymentStatus(data.paymentStatus ?? "PENDING");
+    } catch {
+      setError("Impossible de récupérer la commande.");
+    }
+  }
 
   async function checkPayment() {
     if (!orderId) {
@@ -36,7 +85,9 @@ function ConfirmationContent() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error ?? "Impossible de vérifier le paiement.");
+        setError(
+          data.error ?? "Impossible de vérifier le paiement."
+        );
         return;
       }
 
@@ -49,10 +100,8 @@ function ConfirmationContent() {
   useEffect(() => {
     if (!orderId) return;
 
-    checkPayment();
+    loadOrder();
 
-    // Après le retour de PayTech, on vérifie plusieurs fois
-    // car l'IPN peut arriver quelques secondes après.
     if (paymentResult === "success") {
       setChecking(true);
 
@@ -62,6 +111,7 @@ function ConfirmationContent() {
         attempts += 1;
 
         await checkPayment();
+        await loadOrder();
 
         if (attempts >= 15) {
           clearInterval(interval);
@@ -121,6 +171,9 @@ function ConfirmationContent() {
   const paid = paymentStatus === "PAID";
   const failed = paymentStatus === "FAILED";
 
+  const totalAmount =
+    order?.finalAmount ?? order?.amount ?? 0;
+
   return (
     <main className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-100 bg-white">
@@ -163,37 +216,69 @@ function ConfirmationContent() {
           </p>
 
           <div className="mt-8 rounded-2xl bg-green-50 p-5 text-left">
-            <div className="flex justify-between">
-              <span className="text-slate-500">
-                Produit
+
+            <div className="mb-4 flex items-center justify-between">
+              <span className="font-bold text-slate-700">
+                Votre commande
               </span>
 
-              <span className="font-bold">
-                Riz brisé ordinaire
-              </span>
-            </div>
-
-            <div className="mt-3 flex justify-between">
-              <span className="text-slate-500">
-                Format
-              </span>
-
-              <span className="font-bold">
-                Sac de 50 kg
-              </span>
-            </div>
-
-            <div className="mt-3 flex justify-between">
-              <span className="text-slate-500">
-                Commande
-              </span>
-
-              <span className="font-bold">
+              <span className="font-bold text-slate-500">
                 #{orderId ?? "—"}
               </span>
             </div>
 
-            <div className="mt-3 flex justify-between">
+            {order?.items?.length ? (
+              <div className="space-y-4">
+                {order.items.map((item) => (
+                  <div
+                    key={item.campaignId}
+                    className="rounded-xl bg-white p-4"
+                  >
+                    <div className="flex justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-slate-900">
+                          {item.product}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          {item.unit}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="font-bold text-slate-900">
+                          {item.quantity} ×{" "}
+                          {item.unitPrice.toLocaleString("fr-FR")}{" "}
+                          FCFA
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-green-700">
+                          {item.amount.toLocaleString("fr-FR")} FCFA
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
+                Chargement de la commande...
+              </p>
+            )}
+
+            <div className="mt-5 border-t border-green-200 pt-4">
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-600">
+                  Total
+                </span>
+
+                <span className="text-xl font-black text-green-700">
+                  {totalAmount.toLocaleString("fr-FR")} FCFA
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-between">
               <span className="text-slate-500">
                 Statut
               </span>

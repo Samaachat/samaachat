@@ -19,9 +19,16 @@ type Campaign = {
   }[];
 };
 
+type CartItem = {
+  campaignId: number;
+  quantity: number;
+};
+
 export default function Home() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cartCount, setCartCount] = useState(0);
+  const [addedProduct, setAddedProduct] = useState("");
 
   useEffect(() => {
     async function loadCampaigns() {
@@ -44,14 +51,78 @@ export default function Home() {
     loadCampaigns();
   }, []);
 
-  function addToCart(campaignId: number) {
-    window.location.href = `/rejoindre?campaignId=${campaignId}`;
+  useEffect(() => {
+    try {
+      const savedCart = localStorage.getItem("samaachat-cart");
+
+      if (savedCart) {
+        const cart: CartItem[] = JSON.parse(savedCart);
+
+        const count = cart.reduce(
+          (sum, item) => sum + item.quantity,
+          0
+        );
+
+        setCartCount(count);
+      }
+    } catch (error) {
+      console.error("Erreur chargement panier :", error);
+    }
+  }, []);
+
+  function addToCart(campaign: Campaign) {
+    try {
+      const savedCart = localStorage.getItem("samaachat-cart");
+
+      let cart: CartItem[] = savedCart
+        ? JSON.parse(savedCart)
+        : [];
+
+      const existingItem = cart.find(
+        (item) => item.campaignId === campaign.id
+      );
+
+      if (existingItem) {
+        cart = cart.map((item) =>
+          item.campaignId === campaign.id
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+              }
+            : item
+        );
+      } else {
+        cart.push({
+          campaignId: campaign.id,
+          quantity: 1,
+        });
+      }
+
+      localStorage.setItem(
+        "samaachat-cart",
+        JSON.stringify(cart)
+      );
+
+      const count = cart.reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      );
+
+      setCartCount(count);
+      setAddedProduct(campaign.product.name);
+
+      setTimeout(() => {
+        setAddedProduct("");
+      }, 2000);
+    } catch (error) {
+      console.error("Erreur ajout panier :", error);
+    }
   }
 
   return (
     <main className="min-h-screen bg-white text-gray-900">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+      <header className="border-b bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-5">
           <div>
             <h1 className="text-2xl font-bold text-green-900">
               SamaAchat
@@ -65,20 +136,32 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Link
               href="/rejoindre"
-              className="rounded-full border border-green-800 px-5 py-2.5 font-semibold text-green-800 hover:bg-green-50"
+              className="relative rounded-full border border-green-800 px-5 py-2.5 font-semibold text-green-800 hover:bg-green-50"
             >
               🛒 Panier
+
+              {cartCount > 0 && (
+                <span className="ml-2 rounded-full bg-yellow-400 px-2 py-0.5 text-xs font-black text-green-950">
+                  {cartCount}
+                </span>
+              )}
             </Link>
 
             <Link
               href="/commandes"
-              className="rounded-full bg-green-800 px-5 py-2.5 font-semibold text-white"
+              className="hidden rounded-full bg-green-800 px-5 py-2.5 font-semibold text-white sm:block"
             >
               Mes commandes
             </Link>
           </div>
         </div>
       </header>
+
+      {addedProduct && (
+        <div className="fixed left-1/2 top-5 z-50 -translate-x-1/2 rounded-2xl bg-green-800 px-5 py-3 text-sm font-bold text-white shadow-xl">
+          ✓ {addedProduct} ajouté au panier
+        </div>
+      )}
 
       <section className="bg-green-50 px-6 py-14">
         <div className="mx-auto max-w-6xl">
@@ -102,7 +185,7 @@ export default function Home() {
               href="/rejoindre"
               className="inline-block rounded-2xl bg-yellow-400 px-6 py-4 font-black text-slate-900 hover:bg-yellow-300"
             >
-              🛒 Voir tous les produits
+              🛒 Voir mon panier
             </Link>
           </div>
         </div>
@@ -120,7 +203,7 @@ export default function Home() {
             </h2>
 
             <p className="mt-2 text-gray-600">
-              Ajoutez plusieurs produits à votre panier et passez une seule commande.
+              Ajoutez plusieurs produits à votre panier avant de passer commande.
             </p>
           </div>
 
@@ -143,8 +226,11 @@ export default function Home() {
           ) : (
             <div className="grid gap-6 md:grid-cols-2">
               {campaigns.map((campaign) => {
-                const currentQuantity = campaign.currentQuantity;
-                const targetQuantity = campaign.targetQuantity;
+                const currentQuantity =
+                  campaign.currentQuantity;
+
+                const targetQuantity =
+                  campaign.targetQuantity;
 
                 const progress = Math.min(
                   Math.round(
@@ -160,9 +246,11 @@ export default function Home() {
                       currentQuantity <= tier.maxQuantity
                   ) ?? campaign.priceTiers[0];
 
-                const nextTier = campaign.priceTiers.find(
-                  (tier) => tier.minQuantity > currentQuantity
-                );
+                const nextTier =
+                  campaign.priceTiers.find(
+                    (tier) =>
+                      tier.minQuantity > currentQuantity
+                  );
 
                 return (
                   <article
@@ -192,7 +280,9 @@ export default function Home() {
 
                           <p className="text-2xl font-extrabold text-green-950">
                             {currentTier
-                              ? currentTier.price.toLocaleString("fr-FR")
+                              ? currentTier.price.toLocaleString(
+                                  "fr-FR"
+                                )
                               : "—"}{" "}
                             FCFA
                           </p>
@@ -202,7 +292,8 @@ export default function Home() {
                       <div className="mt-8">
                         <div className="mb-3 flex justify-between text-sm font-semibold">
                           <span>
-                            {currentQuantity} / {targetQuantity} unités
+                            {currentQuantity} /{" "}
+                            {targetQuantity} unités
                           </span>
 
                           <span>{progress}%</span>
@@ -211,7 +302,9 @@ export default function Home() {
                         <div className="h-4 overflow-hidden rounded-full bg-gray-200">
                           <div
                             className="h-full rounded-full bg-green-700 transition-all"
-                            style={{ width: `${progress}%` }}
+                            style={{
+                              width: `${progress}%`,
+                            }}
                           />
                         </div>
                       </div>
@@ -221,11 +314,15 @@ export default function Home() {
                           <p className="font-semibold text-green-900">
                             Encore{" "}
                             {Math.max(
-                              nextTier.minQuantity - currentQuantity,
+                              nextTier.minQuantity -
+                                currentQuantity,
                               0
                             )}{" "}
                             unités pour atteindre{" "}
-                            {nextTier.price.toLocaleString("fr-FR")} FCFA.
+                            {nextTier.price.toLocaleString(
+                              "fr-FR"
+                            )}{" "}
+                            FCFA.
                           </p>
                         </div>
                       )}
@@ -233,7 +330,9 @@ export default function Home() {
                       <div className="mt-8">
                         <button
                           type="button"
-                          onClick={() => addToCart(campaign.id)}
+                          onClick={() =>
+                            addToCart(campaign)
+                          }
                           className="w-full rounded-2xl bg-green-800 px-6 py-4 text-center font-bold text-white hover:bg-green-900"
                         >
                           🛒 Ajouter au panier
@@ -258,10 +357,12 @@ export default function Home() {
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="text-3xl">1️⃣</div>
 
-              <h3 className="mt-4 font-bold">Choisissez</h3>
+              <h3 className="mt-4 font-bold">
+                Ajoutez au panier
+              </h3>
 
               <p className="mt-2 text-gray-600">
-                Ajoutez les produits dont vous avez besoin à votre panier.
+                Choisissez un ou plusieurs produits sans quitter la page.
               </p>
             </div>
 
@@ -269,21 +370,23 @@ export default function Home() {
               <div className="text-3xl">2️⃣</div>
 
               <h3 className="mt-4 font-bold">
-                Achetez ensemble
+                Passez votre commande
               </h3>
 
               <p className="mt-2 text-gray-600">
-                Plus de participants permettent d'obtenir un meilleur prix.
+                Vérifiez votre panier puis renseignez vos informations.
               </p>
             </div>
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="text-3xl">3️⃣</div>
 
-              <h3 className="mt-4 font-bold">Économisez</h3>
+              <h3 className="mt-4 font-bold">
+                Économisez
+              </h3>
 
               <p className="mt-2 text-gray-600">
-                Le prix final dépend du volume atteint.
+                Plus nous achetons ensemble, plus le prix peut baisser.
               </p>
             </div>
           </div>

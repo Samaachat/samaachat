@@ -19,6 +19,11 @@ type Campaign = {
   }[];
 };
 
+type CartItem = {
+  campaignId: number;
+  quantity: number;
+};
+
 type SelectedProduct = {
   campaignId: number;
   quantity: number;
@@ -37,46 +42,141 @@ export default function RejoindrePage() {
 
   const router = useRouter();
 
+  function getPrice(
+    campaign: Campaign,
+    quantity: number
+  ) {
+    const tier = campaign.priceTiers.find(
+      (tier) =>
+        quantity >= tier.minQuantity &&
+        quantity <= tier.maxQuantity
+    );
+
+    return (
+      tier?.price ??
+      campaign.priceTiers[0]?.price ??
+      0
+    );
+  }
+
   useEffect(() => {
     async function loadCampaigns() {
       try {
         const response = await fetch("/api/campaigns");
 
         if (!response.ok) {
-          throw new Error("Impossible de récupérer les campagnes.");
+          throw new Error(
+            "Impossible de récupérer les campagnes."
+          );
         }
 
         const data = await response.json();
-        const loadedCampaigns: Campaign[] = data.campaigns ?? [];
+        const loadedCampaigns: Campaign[] =
+          data.campaigns ?? [];
 
         setCampaigns(loadedCampaigns);
 
-        // Récupère le produit envoyé depuis la page d'accueil
-        const params = new URLSearchParams(window.location.search);
-        const campaignIdParam = params.get("campaignId");
+        /*
+         * Récupération du panier enregistré
+         * sur la page d'accueil.
+         */
+        let savedCart: CartItem[] = [];
 
-        if (campaignIdParam) {
-          const campaignId = Number(campaignIdParam);
-
-          const campaign = loadedCampaigns.find(
-            (item) => item.id === campaignId
+        try {
+          const saved = localStorage.getItem(
+            "samaachat-cart"
           );
 
-          if (campaign) {
-            const firstTier = campaign.priceTiers[0];
-
-            setSelected([
-              {
-                campaignId: campaign.id,
-                quantity: 1,
-                price: firstTier?.price ?? 0,
-              },
-            ]);
+          if (saved) {
+            savedCart = JSON.parse(saved);
           }
+        } catch (error) {
+          console.error(
+            "Erreur lecture panier :",
+            error
+          );
         }
+
+        /*
+         * Si un campaignId est présent dans l'URL,
+         * on ajoute aussi ce produit au panier.
+         *
+         * Cela permet de garder la compatibilité
+         * avec les anciens liens.
+         */
+        const params = new URLSearchParams(
+          window.location.search
+        );
+
+        const campaignIdParam =
+          params.get("campaignId");
+
+        if (campaignIdParam) {
+          const campaignId = Number(
+            campaignIdParam
+          );
+
+          const existingItem = savedCart.find(
+            (item) =>
+              item.campaignId === campaignId
+          );
+
+          if (existingItem) {
+            existingItem.quantity += 1;
+          } else {
+            savedCart.push({
+              campaignId,
+              quantity: 1,
+            });
+          }
+
+          localStorage.setItem(
+            "samaachat-cart",
+            JSON.stringify(savedCart)
+          );
+        }
+
+        /*
+         * Transformation du panier sauvegardé
+         * en produits sélectionnés avec leur prix.
+         */
+        const selectedProducts: SelectedProduct[] =
+          savedCart
+            .map((item) => {
+              const campaign =
+                loadedCampaigns.find(
+                  (campaign) =>
+                    campaign.id ===
+                    item.campaignId
+                );
+
+              if (!campaign) {
+                return null;
+              }
+
+              return {
+                campaignId: campaign.id,
+                quantity: item.quantity,
+                price: getPrice(
+                  campaign,
+                  item.quantity
+                ),
+              };
+            })
+            .filter(
+              (
+                item
+              ): item is SelectedProduct =>
+                item !== null
+            );
+
+        setSelected(selectedProducts);
       } catch (error) {
         console.error(error);
-        setError("Impossible de charger les produits.");
+
+        setError(
+          "Impossible de charger les produits."
+        );
       } finally {
         setCampaignLoading(false);
       }
@@ -85,20 +185,27 @@ export default function RejoindrePage() {
     loadCampaigns();
   }, []);
 
-  function getPrice(campaign: Campaign, quantity: number) {
-    const tier = campaign.priceTiers.find(
-      (tier) =>
-        quantity >= tier.minQuantity &&
-        quantity <= tier.maxQuantity
-    );
+  function saveCart(
+    products: SelectedProduct[]
+  ) {
+    const cart: CartItem[] = products
+      .filter((item) => item.quantity > 0)
+      .map((item) => ({
+        campaignId: item.campaignId,
+        quantity: item.quantity,
+      }));
 
-    return tier?.price ?? campaign.priceTiers[0]?.price ?? 0;
+    localStorage.setItem(
+      "samaachat-cart",
+      JSON.stringify(cart)
+    );
   }
 
   function getQuantity(campaignId: number) {
     return (
       selected.find(
-        (item) => item.campaignId === campaignId
+        (item) =>
+          item.campaignId === campaignId
       )?.quantity ?? 0
     );
   }
@@ -107,56 +214,75 @@ export default function RejoindrePage() {
     campaign: Campaign,
     quantity: number
   ) {
-    const safeQuantity = Math.max(0, quantity);
-
-    if (safeQuantity === 0) {
-      setSelected((current) =>
-        current.filter(
-          (item) => item.campaignId !== campaign.id
-        )
-      );
-
-      return;
-    }
-
-    const price = getPrice(campaign, safeQuantity);
+    const safeQuantity = Math.max(
+      0,
+      quantity
+    );
 
     setSelected((current) => {
-      const existing = current.find(
-        (item) => item.campaignId === campaign.id
-      );
+      let updated: SelectedProduct[];
 
-      if (existing) {
-        return current.map((item) =>
-          item.campaignId === campaign.id
-            ? {
-                ...item,
-                quantity: safeQuantity,
-                price,
-              }
-            : item
+      if (safeQuantity === 0) {
+        updated = current.filter(
+          (item) =>
+            item.campaignId !==
+            campaign.id
         );
+      } else {
+        const price = getPrice(
+          campaign,
+          safeQuantity
+        );
+
+        const existing = current.find(
+          (item) =>
+            item.campaignId ===
+            campaign.id
+        );
+
+        if (existing) {
+          updated = current.map((item) =>
+            item.campaignId ===
+            campaign.id
+              ? {
+                  ...item,
+                  quantity:
+                    safeQuantity,
+                  price,
+                }
+              : item
+          );
+        } else {
+          updated = [
+            ...current,
+            {
+              campaignId:
+                campaign.id,
+              quantity:
+                safeQuantity,
+              price,
+            },
+          ];
+        }
       }
 
-      return [
-        ...current,
-        {
-          campaignId: campaign.id,
-          quantity: safeQuantity,
-          price,
-        },
-      ];
+      saveCart(updated);
+
+      return updated;
     });
   }
 
   const total = selected.reduce(
     (sum, item) =>
-      sum + item.quantity * item.price,
+      sum +
+      item.quantity *
+        item.price,
     0
   );
 
   const totalItems = selected.reduce(
-    (sum, item) => sum + item.quantity,
+    (sum, item) =>
+      sum + item.quantity,
     0
   );
 
@@ -164,11 +290,16 @@ export default function RejoindrePage() {
     setError("");
 
     if (selected.length === 0) {
-      setError("Veuillez choisir au moins un produit.");
+      setError(
+        "Veuillez choisir au moins un produit."
+      );
       return;
     }
 
-    if (!name.trim() || !phone.trim()) {
+    if (
+      !name.trim() ||
+      !phone.trim()
+    ) {
       setError(
         "Veuillez renseigner votre nom et votre numéro WhatsApp."
       );
@@ -185,27 +316,41 @@ export default function RejoindrePage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          phone,
-          address,
-          items: selected,
-        }),
-      });
+      const response = await fetch(
+        "/api/orders",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            name,
+            phone,
+            address,
+            items: selected,
+          }),
+        }
+      );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         setError(
-          data.error || "Une erreur est survenue."
+          data.error ||
+            "Une erreur est survenue."
         );
         return;
       }
+
+      /*
+       * Commande créée :
+       * on vide le panier.
+       */
+      localStorage.removeItem(
+        "samaachat-cart"
+      );
 
       router.push(
         `/confirmation?orderId=${data.orderId}`
@@ -227,7 +372,10 @@ export default function RejoindrePage() {
             href="/"
             className="text-2xl font-extrabold text-green-700"
           >
-            Sama<span className="text-yellow-500">Achat</span>
+            Sama
+            <span className="text-yellow-500">
+              Achat
+            </span>
           </a>
 
           <a
@@ -244,7 +392,7 @@ export default function RejoindrePage() {
           href="/"
           className="text-sm font-semibold text-green-700 hover:underline"
         >
-          ← Retour aux produits
+          ← Continuer mes achats
         </a>
 
         <div className="mt-6">
@@ -253,178 +401,236 @@ export default function RejoindrePage() {
           </h1>
 
           <p className="mt-2 text-slate-500">
-            Ajoutez plusieurs produits et passez une seule commande.
+            Vérifiez vos produits avant de passer commande.
           </p>
         </div>
 
         {campaignLoading ? (
           <div className="mt-8 rounded-3xl bg-white p-8 text-center shadow-lg">
-            Chargement des produits...
+            Chargement du panier...
           </div>
         ) : (
           <>
             <div className="mt-8 space-y-5">
-              {campaigns.map((campaign) => {
-                const quantity = getQuantity(campaign.id);
+              {campaigns.map(
+                (campaign) => {
+                  const quantity =
+                    getQuantity(
+                      campaign.id
+                    );
 
-                const price = getPrice(
-                  campaign,
-                  quantity || 1
-                );
+                  const price =
+                    getPrice(
+                      campaign,
+                      quantity || 1
+                    );
 
-                const productTotal =
-                  quantity * price;
+                  const productTotal =
+                    quantity *
+                    price;
 
-                return (
-                  <div
-                    key={campaign.id}
-                    className={`rounded-3xl bg-white p-6 shadow-lg ${
-                      quantity > 0
-                        ? "ring-2 ring-green-500"
-                        : ""
-                    }`}
-                  >
-                    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm font-bold text-green-700">
-                          ACHAT GROUPÉ
-                        </p>
-
-                        <h2 className="mt-1 text-2xl font-black">
-                          {campaign.product.name}
-                        </h2>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                          {campaign.product.description ??
-                            campaign.product.unit}
-                        </p>
-
-                        <p className="mt-3 font-bold text-green-700">
-                          {price.toLocaleString("fr-FR")} FCFA /{" "}
-                          {campaign.product.unit.toLowerCase()}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          {campaign.currentQuantity} /{" "}
-                          {campaign.targetQuantity} déjà commandés
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 md:w-64">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateQuantity(
-                              campaign,
-                              quantity - 1
-                            )
-                          }
-                          className="h-12 w-12 rounded-xl bg-slate-100 text-2xl font-bold"
-                        >
-                          −
-                        </button>
-
-                        <div className="text-center">
-                          <p className="text-3xl font-black">
-                            {quantity}
+                  return (
+                    <div
+                      key={
+                        campaign.id
+                      }
+                      className={`rounded-3xl bg-white p-6 shadow-lg ${
+                        quantity > 0
+                          ? "ring-2 ring-green-500"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-green-700">
+                            ACHAT GROUPÉ
                           </p>
 
-                          <p className="text-xs text-slate-500">
-                            {campaign.product.unit}
+                          <h2 className="mt-1 text-2xl font-black">
+                            {
+                              campaign
+                                .product
+                                .name
+                            }
+                          </h2>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            {
+                              campaign
+                                .product
+                                .description
+                            }
+                          </p>
+
+                          <p className="mt-3 font-bold text-green-700">
+                            {price.toLocaleString(
+                              "fr-FR"
+                            )}{" "}
+                            FCFA /{" "}
+                            {campaign.product.unit.toLowerCase()}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            {
+                              campaign.currentQuantity
+                            }{" "}
+                            /{" "}
+                            {
+                              campaign.targetQuantity
+                            }{" "}
+                            déjà commandés
                           </p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateQuantity(
-                              campaign,
-                              quantity + 1
-                            )
-                          }
-                          className="h-12 w-12 rounded-xl bg-green-100 text-2xl font-bold text-green-700"
-                        >
-                          +
-                        </button>
+                        <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 md:w-64">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateQuantity(
+                                campaign,
+                                quantity -
+                                  1
+                              )
+                            }
+                            className="h-12 w-12 rounded-xl bg-slate-100 text-2xl font-bold"
+                          >
+                            −
+                          </button>
+
+                          <div className="text-center">
+                            <p className="text-3xl font-black">
+                              {
+                                quantity
+                              }
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {
+                                campaign
+                                  .product
+                                  .unit
+                              }
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateQuantity(
+                                campaign,
+                                quantity +
+                                  1
+                              )
+                            }
+                            className="h-12 w-12 rounded-xl bg-green-100 text-2xl font-bold text-green-700"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
+
+                      {quantity >
+                        0 && (
+                        <div className="mt-5 border-t border-slate-100 pt-4 text-right">
+                          <span className="text-sm text-slate-500">
+                            Sous-total :{" "}
+                          </span>
+
+                          <span className="text-lg font-black text-green-700">
+                            {productTotal.toLocaleString(
+                              "fr-FR"
+                            )}{" "}
+                            FCFA
+                          </span>
+                        </div>
+                      )}
                     </div>
-
-                    {quantity > 0 && (
-                      <div className="mt-5 border-t border-slate-100 pt-4 text-right">
-                        <span className="text-sm text-slate-500">
-                          Sous-total :{" "}
-                        </span>
-
-                        <span className="text-lg font-black text-green-700">
-                          {productTotal.toLocaleString(
-                            "fr-FR"
-                          )} FCFA
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                }
+              )}
             </div>
 
-            {selected.length > 0 && (
+            {selected.length >
+              0 && (
               <div className="mt-6 rounded-3xl bg-green-50 p-6">
                 <h2 className="text-xl font-black text-green-950">
-                  🛒 Votre panier
+                  🛒 Résumé du panier
                 </h2>
 
                 <div className="mt-4 space-y-3">
-                  {selected.map((item) => {
-                    const campaign = campaigns.find(
-                      (campaign) =>
-                        campaign.id ===
-                        item.campaignId
-                    );
+                  {selected.map(
+                    (item) => {
+                      const campaign =
+                        campaigns.find(
+                          (
+                            campaign
+                          ) =>
+                            campaign.id ===
+                            item.campaignId
+                        );
 
-                    if (!campaign) {
-                      return null;
-                    }
+                      if (!campaign) {
+                        return null;
+                      }
 
-                    return (
-                      <div
-                        key={item.campaignId}
-                        className="flex items-center justify-between border-b border-green-100 pb-3"
-                      >
-                        <div>
-                          <p className="font-bold text-slate-900">
-                            {campaign.product.name}
-                          </p>
+                      return (
+                        <div
+                          key={
+                            item.campaignId
+                          }
+                          className="flex items-center justify-between border-b border-green-100 pb-3"
+                        >
+                          <div>
+                            <p className="font-bold text-slate-900">
+                              {
+                                campaign
+                                  .product
+                                  .name
+                              }
+                            </p>
 
-                          <p className="text-sm text-slate-500">
-                            {item.quantity} ×{" "}
-                            {item.price.toLocaleString(
+                            <p className="text-sm text-slate-500">
+                              {
+                                item.quantity
+                              }{" "}
+                              ×{" "}
+                              {item.price.toLocaleString(
+                                "fr-FR"
+                              )}{" "}
+                              FCFA
+                            </p>
+                          </div>
+
+                          <p className="font-black text-green-700">
+                            {(
+                              item.quantity *
+                              item.price
+                            ).toLocaleString(
                               "fr-FR"
-                            )} FCFA
+                            )}{" "}
+                            FCFA
                           </p>
                         </div>
-
-                        <p className="font-black text-green-700">
-                          {(
-                            item.quantity *
-                            item.price
-                          ).toLocaleString("fr-FR")}{" "}
-                          FCFA
-                        </p>
-                      </div>
-                    );
-                  })}
+                      );
+                    }
+                  )}
                 </div>
 
                 <div className="mt-4 flex items-center justify-between">
                   <span className="font-semibold text-slate-600">
-                    {totalItems} produit
-                    {totalItems > 1 ? "s" : ""}
+                    {totalItems}{" "}
+                    produit
+                    {totalItems >
+                    1
+                      ? "s"
+                      : ""}
                   </span>
 
                   <span className="text-2xl font-black text-green-700">
                     {total.toLocaleString(
                       "fr-FR"
-                    )} FCFA
+                    )}{" "}
+                    FCFA
                   </span>
                 </div>
               </div>
@@ -447,7 +653,9 @@ export default function RejoindrePage() {
                 type="text"
                 value={name}
                 onChange={(e) =>
-                  setName(e.target.value)
+                  setName(
+                    e.target.value
+                  )
                 }
                 placeholder="Ex : Mamadou Ndiaye"
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-green-600"
@@ -463,7 +671,9 @@ export default function RejoindrePage() {
                 type="tel"
                 value={phone}
                 onChange={(e) =>
-                  setPhone(e.target.value)
+                  setPhone(
+                    e.target.value
+                  )
                 }
                 placeholder="Ex : 77 123 45 67"
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-green-600"
@@ -478,7 +688,9 @@ export default function RejoindrePage() {
               <textarea
                 value={address}
                 onChange={(e) =>
-                  setAddress(e.target.value)
+                  setAddress(
+                    e.target.value
+                  )
                 }
                 placeholder="Ex : Parcelles Assainies, Unité 15, près de..."
                 rows={3}
@@ -500,9 +712,12 @@ export default function RejoindrePage() {
 
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={
+            handleSubmit
+          }
           disabled={
-            loading || campaignLoading
+            loading ||
+            campaignLoading
           }
           className="mt-6 w-full rounded-2xl bg-yellow-400 px-6 py-4 text-lg font-black text-slate-900 hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
         >

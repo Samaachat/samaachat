@@ -168,7 +168,7 @@ export async function POST(request: Request) {
     // 5. RÉFÉRENCE UNIQUE PAYTECH
     // ---------------------------------------------------------
 
-    const refCommand = `SAMA-ORDER-${order.id}`;
+    const refCommand = `SAMA-ORDER-${order.id}-${Date.now()}`;
 
     // ---------------------------------------------------------
     // 6. DONNÉES ENVOYÉES À PAYTECH

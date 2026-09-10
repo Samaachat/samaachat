@@ -138,16 +138,21 @@ export async function POST(request: Request) {
       });
     }
 
-    const orderId = Number(
-      refCommand.substring(prefix.length)
-    );
+    const orderIdMatch = refCommand.match(/^SAMA-ORDER-(\d+)-\d+$/);
 
-    if (!Number.isInteger(orderId) || orderId < 1) {
-      return new NextResponse("Invalid order", {
-        status: 400,
-      });
-    }
+if (!orderIdMatch) {
+  return new NextResponse("Invalid order", {
+    status: 400,
+  });
+}
 
+const orderId = Number(orderIdMatch[1]);
+
+if (!Number.isInteger(orderId) || orderId < 1) {
+  return new NextResponse("Invalid order", {
+    status: 400,
+  });
+}
     const order = await prisma.order.findUnique({
       where: {
         id: orderId,

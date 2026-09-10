@@ -11,6 +11,7 @@ type PriceTier = {
 type Campaign = {
   id: number;
   product: string;
+  unit?: string;
   currentQuantity: number;
   targetQuantity: number;
   priceTiers: PriceTier[];
@@ -29,6 +30,7 @@ type Order = {
   items: {
     campaignId: number;
     product: string;
+    unit?: string;
     quantity: number;
     unitPrice: number;
     amount: number;
@@ -49,6 +51,7 @@ type Statistics = {
 };
 
 type DashboardData = {
+  campaigns: Campaign[];
   campaign: Campaign | null;
   statistics: Statistics;
   orders: Order[];
@@ -59,9 +62,10 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [closeMessage, setCloseMessage] = useState("");
-  const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(
     null
   );
+  const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
   async function loadDashboard() {
     try {
@@ -83,6 +87,13 @@ export default function AdminDashboardPage() {
       const dashboardData = await response.json();
 
       setData(dashboardData);
+
+      if (
+        selectedCampaignId === null &&
+        dashboardData.campaigns?.length > 0
+      ) {
+        setSelectedCampaignId(dashboardData.campaigns[0].id);
+      }
     } catch (error) {
       console.error("Erreur dashboard :", error);
     } finally {
@@ -95,8 +106,18 @@ export default function AdminDashboardPage() {
   }, []);
 
   async function closeCampaign() {
+    if (selectedCampaignId === null) {
+      setCloseMessage("Veuillez sélectionner une campagne.");
+      return;
+    }
+
+    const selectedCampaign =
+      data?.campaigns.find(
+        (campaign) => campaign.id === selectedCampaignId
+      ) ?? null;
+
     const confirmed = window.confirm(
-      "Êtes-vous sûr de vouloir clôturer cette campagne ? Le prix final sera appliqué à toutes les commandes."
+      `Êtes-vous sûr de vouloir clôturer la campagne "${selectedCampaign?.product ?? ""}" ? Le prix final sera appliqué aux commandes concernées.`
     );
 
     if (!confirmed) {
@@ -109,6 +130,12 @@ export default function AdminDashboardPage() {
     try {
       const response = await fetch("/api/admin/campaign/close", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          campaignId: selectedCampaignId,
+        }),
       });
 
       const result = await response.json();
@@ -123,7 +150,7 @@ export default function AdminDashboardPage() {
       setCloseMessage(
         `Campagne clôturée. Prix final : ${result.finalUnitPrice.toLocaleString(
           "fr-FR"
-        )} FCFA/sac. ${result.ordersUpdated} commande(s) mise(s) à jour.`
+        )} FCFA. ${result.ordersUpdated} commande(s) mise(s) à jour.`
       );
 
       await loadDashboard();
@@ -206,7 +233,12 @@ export default function AdminDashboardPage() {
     );
   }
 
-  const { campaign, statistics, orders } = data;
+  const { campaigns, statistics, orders } = data;
+
+  const campaign =
+    campaigns.find((item) => item.id === selectedCampaignId) ??
+    campaigns[0] ??
+    null;
 
   const progress = campaign
     ? Math.min(
@@ -229,7 +261,8 @@ export default function AdminDashboardPage() {
   const nextTier =
     campaign?.priceTiers
       .filter(
-        (tier) => tier.minQuantity > (campaign?.currentQuantity ?? 0)
+        (tier) =>
+          tier.minQuantity > (campaign?.currentQuantity ?? 0)
       )
       .at(0) ?? null;
 
@@ -243,7 +276,7 @@ export default function AdminDashboardPage() {
             </h1>
 
             <p className="mt-2 text-slate-500">
-              Vue d'ensemble de SamaAchat
+              Vue d&apos;ensemble de SamaAchat
             </p>
           </div>
 
@@ -284,7 +317,7 @@ export default function AdminDashboardPage() {
 
           <div className="rounded-3xl bg-white p-6 shadow-sm">
             <p className="text-sm font-bold text-slate-500">
-              Chiffre d'affaires
+              Chiffre d&apos;affaires
             </p>
 
             <p className="mt-2 text-2xl font-black text-green-700">
@@ -292,6 +325,28 @@ export default function AdminDashboardPage() {
             </p>
           </div>
         </div>
+
+        {campaigns.length > 0 && (
+          <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+            <label className="text-sm font-bold text-slate-500">
+              CAMPAGNE À GÉRER
+            </label>
+
+            <select
+              value={selectedCampaignId ?? ""}
+              onChange={(event) =>
+                setSelectedCampaignId(Number(event.target.value))
+              }
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-900"
+            >
+              {campaigns.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.product}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {campaign && (
           <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm md:p-8">
@@ -306,7 +361,8 @@ export default function AdminDashboardPage() {
                 </h2>
 
                 <p className="mt-1 text-slate-500">
-                  Objectif : {campaign.targetQuantity} sacs
+                  Objectif : {campaign.targetQuantity}{" "}
+                  {campaign.unit ?? "unités"}
                 </p>
               </div>
 
@@ -348,7 +404,8 @@ export default function AdminDashboardPage() {
                   {campaign.currentQuantity}
                   <span className="text-lg text-slate-400">
                     {" "}
-                    / {campaign.targetQuantity} sacs
+                    / {campaign.targetQuantity}{" "}
+                    {campaign.unit ?? "unités"}
                   </span>
                 </p>
 
@@ -373,12 +430,10 @@ export default function AdminDashboardPage() {
 
                 <p className="mt-1 text-lg font-black text-slate-900">
                   Encore{" "}
-                  {nextTier.minQuantity - campaign.currentQuantity} sac
-                  {nextTier.minQuantity - campaign.currentQuantity > 1
-                    ? "s"
-                    : ""}{" "}
-                  pour atteindre{" "}
-                  {nextTier.price.toLocaleString("fr-FR")} FCFA / sac
+                  {nextTier.minQuantity - campaign.currentQuantity}{" "}
+                  {campaign.unit ?? "unités"} pour atteindre{" "}
+                  {nextTier.price.toLocaleString("fr-FR")} FCFA /{" "}
+                  {campaign.unit ?? "unité"}
                 </p>
               </div>
             )}
@@ -409,7 +464,7 @@ export default function AdminDashboardPage() {
                           {tier.maxQuantity >= 999999
                             ? "∞"
                             : tier.maxQuantity}{" "}
-                          sacs
+                          {campaign.unit ?? "unités"}
                         </p>
 
                         {active && (
@@ -436,7 +491,7 @@ export default function AdminDashboardPage() {
           </p>
 
           <p className="mt-2 text-3xl font-black text-slate-900">
-            {statistics.totalQuantity} sac
+            {statistics.totalQuantity} unité
             {statistics.totalQuantity > 1 ? "s" : ""}
           </p>
         </div>
@@ -498,76 +553,97 @@ export default function AdminDashboardPage() {
                       <td className="px-4 py-4 text-slate-500">
                         {order.phone}
                       </td>
-<td className="px-4 py-4">
-  <div className="space-y-2">
-    {order.items.map((item) => (
-      <div
-        key={item.campaignId}
-        className="rounded-lg bg-slate-50 px-3 py-2"
-      >
-        <p className="font-bold text-slate-700">
-          🛒 {item.product}
-        </p>
 
-        <p className="text-sm text-slate-500">
-          {item.quantity} × {item.unitPrice.toLocaleString("fr-FR")} FCFA
-        </p>
-      </div>
-    ))}
-  </div>
-</td>
-                      <td className="max-w-[280px] px-4 py-4">
-  <div className="rounded-xl bg-slate-50 p-3">
-    <p className="font-semibold text-slate-700">
-      📍 {order.address || "Adresse non renseignée"}
-    </p>
-
-    <select
-      value={order.deliveryStatus}
-      onChange={async (event) => {
-        const newStatus = event.target.value;
-
-        try {
-          const response = await fetch(
-            "/api/admin/delivery/status",
-            {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                orderId: order.id,
-                status: newStatus,
-              }),
-            }
-          );
-
-          const result = await response.json();
-
-          if (!response.ok) {
-            alert(
-              result.error ??
-                "Impossible de modifier le statut de livraison."
-            );
-            return;
-          }
-
-          await loadDashboard();
-        } catch {
-          alert("Impossible de contacter le serveur.");
-        }
-      }}
-      className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
-    >
-      <option value="PENDING">En attente</option>
-      <option value="PREPARING">En préparation</option>
-      <option value="OUT_FOR_DELIVERY">En livraison</option>
-      <option value="DELIVERED">Livrée</option>
-    </select>
-  </div>
-</td>
                       <td className="px-4 py-4">
-                        {order.quantity} sac
+                        <div className="space-y-2">
+                          {order.items.map((item) => (
+                            <div
+                              key={item.campaignId}
+                              className="rounded-lg bg-slate-50 px-3 py-2"
+                            >
+                              <p className="font-bold text-slate-700">
+                                🛒 {item.product}
+                              </p>
+
+                              <p className="text-sm text-slate-500">
+                                {item.quantity} ×{" "}
+                                {item.unitPrice.toLocaleString(
+                                  "fr-FR"
+                                )}{" "}
+                                FCFA
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="max-w-[280px] px-4 py-4">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <p className="font-semibold text-slate-700">
+                            📍{" "}
+                            {order.address ||
+                              "Adresse non renseignée"}
+                          </p>
+
+                          <select
+                            value={order.deliveryStatus}
+                            onChange={async (event) => {
+                              const newStatus = event.target.value;
+
+                              try {
+                                const response = await fetch(
+                                  "/api/admin/delivery/status",
+                                  {
+                                    method: "PATCH",
+                                    headers: {
+                                      "Content-Type":
+                                        "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      orderId: order.id,
+                                      status: newStatus,
+                                    }),
+                                  }
+                                );
+
+                                const result =
+                                  await response.json();
+
+                                if (!response.ok) {
+                                  alert(
+                                    result.error ??
+                                      "Impossible de modifier le statut de livraison."
+                                  );
+                                  return;
+                                }
+
+                                await loadDashboard();
+                              } catch {
+                                alert(
+                                  "Impossible de contacter le serveur."
+                                );
+                              }
+                            }}
+                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+                          >
+                            <option value="PENDING">
+                              En attente
+                            </option>
+                            <option value="PREPARING">
+                              En préparation
+                            </option>
+                            <option value="OUT_FOR_DELIVERY">
+                              En livraison
+                            </option>
+                            <option value="DELIVERED">
+                              Livrée
+                            </option>
+                          </select>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {order.quantity} unité
                         {order.quantity > 1 ? "s" : ""}
                       </td>
 
@@ -621,7 +697,9 @@ export default function AdminDashboardPage() {
                                   "CONFIRMED"
                                 )
                               }
-                              disabled={updatingOrderId === order.id}
+                              disabled={
+                                updatingOrderId === order.id
+                              }
                               className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {updatingOrderId === order.id
@@ -638,7 +716,9 @@ export default function AdminDashboardPage() {
                                   "DELIVERED"
                                 )
                               }
-                              disabled={updatingOrderId === order.id}
+                              disabled={
+                                updatingOrderId === order.id
+                              }
                               className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {updatingOrderId === order.id
@@ -656,7 +736,9 @@ export default function AdminDashboardPage() {
                                     "CANCELLED"
                                   )
                                 }
-                                disabled={updatingOrderId === order.id}
+                                disabled={
+                                  updatingOrderId === order.id
+                                }
                                 className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 Annuler

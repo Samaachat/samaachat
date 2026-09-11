@@ -65,9 +65,7 @@ export default function CommandesPage() {
     setOrders([]);
 
     try {
-      const response = await fetch(
-        `/api/orders/${encodeURIComponent(cleanPhone)}`,
-        {
+      const response = await fetch(`/api/orders/by-phone/${encodeURIComponent(cleanPhone)}`, {
           method: "GET",
           cache: "no-store",
         }

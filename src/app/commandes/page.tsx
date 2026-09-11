@@ -46,16 +46,13 @@ export default function CommandesPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
 
   async function searchOrders() {
-    const cleanPhone = phone
-      .replace(/\s/g, "")
-      .trim();
+    const cleanPhone = phone.replace(/\s/g, "").trim();
 
     if (!cleanPhone) {
-      setError(
-        "Veuillez saisir votre numéro de téléphone."
-      );
+      setError("Veuillez saisir votre numéro de téléphone.");
       return;
     }
 
@@ -65,7 +62,9 @@ export default function CommandesPage() {
     setOrders([]);
 
     try {
-      const response = await fetch(`/api/orders/by-phone/${encodeURIComponent(cleanPhone)}`, {
+      const response = await fetch(
+        `/api/orders/by-phone/${encodeURIComponent(cleanPhone)}`,
+        {
           method: "GET",
           cache: "no-store",
         }
@@ -75,8 +74,7 @@ export default function CommandesPage() {
 
       if (!response.ok) {
         setError(
-          data.error ??
-            "Impossible de récupérer vos commandes."
+          data.error ?? "Impossible de récupérer vos commandes."
         );
         return;
       }
@@ -88,6 +86,64 @@ export default function CommandesPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function payOrder(orderId: number) {
+    setPayingOrderId(orderId);
+    setError("");
+
+    try {
+      const response = await fetch("/api/payments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          orderId,
+          provider: "PAYTECH",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(
+          data.error ?? "Impossible de lancer le paiement."
+        );
+        return;
+      }
+
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
+
+      if (data.status === "PAID") {
+        setOrders((currentOrders) =>
+          currentOrders.map((order) =>
+            order.id === orderId
+              ? {
+                  ...order,
+                  paymentStatus: "PAID",
+                  status: "CONFIRMED",
+                }
+              : order
+          )
+        );
+
+        return;
+      }
+
+      setError(
+        "Le lien de paiement n'a pas été fourni par PayTech."
+      );
+    } catch {
+      setError(
+        "Impossible de contacter le service de paiement."
+      );
+    } finally {
+      setPayingOrderId(null);
     }
   }
 
@@ -152,14 +208,10 @@ export default function CommandesPage() {
             <button
               type="button"
               onClick={searchOrders}
-              disabled={
-                !phone.trim() || loading
-              }
+              disabled={!phone.trim() || loading}
               className="rounded-xl bg-green-700 px-5 py-3 font-bold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading
-                ? "Recherche..."
-                : "Rechercher"}
+              {loading ? "Recherche..." : "Rechercher"}
             </button>
           </div>
 
@@ -215,14 +267,12 @@ export default function CommandesPage() {
 
                   <span
                     className={
-                      order.paymentStatus ===
-                      "PAID"
+                      order.paymentStatus === "PAID"
                         ? "rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700"
                         : "rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700"
                     }
                   >
-                    {order.paymentStatus ===
-                    "PAID"
+                    {order.paymentStatus === "PAID"
                       ? "Payée"
                       : "Paiement en attente"}
                   </span>
@@ -234,41 +284,39 @@ export default function CommandesPage() {
                   </p>
 
                   <div className="mt-4 space-y-3">
-                    {order.items.map(
-                      (item, index) => (
-                        <div
-                          key={`${item.campaignId}-${index}`}
-                          className="rounded-xl bg-slate-50 p-3"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-bold text-slate-900">
-                                {item.product}
-                              </p>
+                    {order.items.map((item, index) => (
+                      <div
+                        key={`${item.campaignId}-${index}`}
+                        className="rounded-xl bg-slate-50 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-slate-900">
+                              {item.product}
+                            </p>
 
-                              <p className="mt-1 text-xs text-slate-500">
-                                {item.quantity} ×{" "}
-                                {item.unitPrice.toLocaleString(
-                                  "fr-FR"
-                                )}{" "}
-                                FCFA
-                              </p>
-
-                              <p className="mt-1 text-xs text-slate-400">
-                                {item.unit}
-                              </p>
-                            </div>
-
-                            <p className="font-black text-green-700">
-                              {item.amount.toLocaleString(
+                            <p className="mt-1 text-xs text-slate-500">
+                              {item.quantity} ×{" "}
+                              {item.unitPrice.toLocaleString(
                                 "fr-FR"
                               )}{" "}
                               FCFA
                             </p>
+
+                            <p className="mt-1 text-xs text-slate-400">
+                              {item.unit}
+                            </p>
                           </div>
+
+                          <p className="font-black text-green-700">
+                            {item.amount.toLocaleString(
+                              "fr-FR"
+                            )}{" "}
+                            FCFA
+                          </p>
                         </div>
-                      )
-                    )}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -281,16 +329,12 @@ export default function CommandesPage() {
                     <div className="flex flex-1 flex-col items-center">
                       <div
                         className={
-                          order.status !==
-                          "CANCELLED"
+                          order.status !== "CANCELLED"
                             ? "flex h-9 w-9 items-center justify-center rounded-full bg-green-700 text-sm font-black text-white"
                             : "flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-sm font-black text-white"
                         }
                       >
-                        {order.status ===
-                        "CANCELLED"
-                          ? "×"
-                          : "1"}
+                        {order.status === "CANCELLED" ? "×" : "1"}
                       </div>
 
                       <span className="mt-2 text-center text-xs font-bold text-slate-600">
@@ -300,10 +344,8 @@ export default function CommandesPage() {
 
                     <div
                       className={
-                        order.status ===
-                          "CONFIRMED" ||
-                        order.status ===
-                          "DELIVERED"
+                        order.status === "CONFIRMED" ||
+                        order.status === "DELIVERED"
                           ? "h-1 flex-1 bg-green-600"
                           : "h-1 flex-1 bg-slate-200"
                       }
@@ -312,10 +354,8 @@ export default function CommandesPage() {
                     <div className="flex flex-1 flex-col items-center">
                       <div
                         className={
-                          order.status ===
-                            "CONFIRMED" ||
-                          order.status ===
-                            "DELIVERED"
+                          order.status === "CONFIRMED" ||
+                          order.status === "DELIVERED"
                             ? "flex h-9 w-9 items-center justify-center rounded-full bg-green-700 text-sm font-black text-white"
                             : "flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-black text-slate-500"
                         }
@@ -330,8 +370,7 @@ export default function CommandesPage() {
 
                     <div
                       className={
-                        order.status ===
-                        "DELIVERED"
+                        order.status === "DELIVERED"
                           ? "h-1 flex-1 bg-green-600"
                           : "h-1 flex-1 bg-slate-200"
                       }
@@ -340,8 +379,7 @@ export default function CommandesPage() {
                     <div className="flex flex-1 flex-col items-center">
                       <div
                         className={
-                          order.status ===
-                          "DELIVERED"
+                          order.status === "DELIVERED"
                             ? "flex h-9 w-9 items-center justify-center rounded-full bg-green-700 text-sm font-black text-white"
                             : "flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-black text-slate-500"
                         }
@@ -358,21 +396,16 @@ export default function CommandesPage() {
                   <div className="mt-4 text-center">
                     <span
                       className={
-                        order.status ===
-                        "DELIVERED"
+                        order.status === "DELIVERED"
                           ? "font-black text-green-700"
-                          : order.status ===
-                              "CONFIRMED"
+                          : order.status === "CONFIRMED"
                             ? "font-black text-green-700"
-                            : order.status ===
-                                "CANCELLED"
+                            : order.status === "CANCELLED"
                               ? "font-black text-red-600"
                               : "font-black text-yellow-600"
                       }
                     >
-                      {getStatusLabel(
-                        order.status
-                      )}
+                      {getStatusLabel(order.status)}
                     </span>
                   </div>
                 </div>
@@ -391,8 +424,7 @@ export default function CommandesPage() {
                     </span>
                   </div>
 
-                  {order.finalAmount !==
-                    null && (
+                  {order.finalAmount !== null && (
                     <div className="mt-3 border-t border-green-100 pt-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">
@@ -410,13 +442,33 @@ export default function CommandesPage() {
                   )}
                 </div>
 
+                {order.paymentStatus !== "PAID" &&
+                  order.status !== "CANCELLED" && (
+                    <button
+                      type="button"
+                      onClick={() => payOrder(order.id)}
+                      disabled={payingOrderId === order.id}
+                      className="mt-4 w-full rounded-xl bg-yellow-500 px-4 py-3 font-black text-slate-900 transition hover:bg-yellow-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {payingOrderId === order.id
+                        ? "Ouverture du paiement..."
+                        : `Payer maintenant — ${order.amount.toLocaleString(
+                            "fr-FR"
+                          )} FCFA`}
+                    </button>
+                  )}
+
+                {order.paymentStatus === "PAID" && (
+                  <div className="mt-4 rounded-xl bg-green-100 px-4 py-3 text-center text-sm font-bold text-green-700">
+                    ✓ Paiement confirmé
+                  </div>
+                )}
+
                 <div className="mt-4 text-xs text-slate-400">
                   Commande créée le{" "}
                   {new Date(
                     order.createdAt
-                  ).toLocaleDateString(
-                    "fr-FR"
-                  )}
+                  ).toLocaleDateString("fr-FR")}
                 </div>
               </div>
             ))}

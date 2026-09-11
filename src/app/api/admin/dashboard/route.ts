@@ -1,8 +1,18 @@
+import { getAdminFromRequest } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json(
+        { error: "Accès administrateur requis." },
+        { status: 401 }
+      );
+    }
+
     const campaigns = await prisma.campaign.findMany({
       where: {
         status: "ACTIVE",
@@ -61,7 +71,8 @@ export async function GET() {
     );
 
     const totalRevenue = paidOrders.reduce(
-      (total, order) => total + (order.finalAmount ?? order.amount),
+      (total, order) =>
+        total + (order.finalAmount ?? order.amount),
       0
     );
 
@@ -77,7 +88,6 @@ export async function GET() {
         priceTiers: campaign.priceTiers,
       })),
 
-      // Compatibilité temporaire avec l'ancien dashboard.
       campaign: campaigns[0]
         ? {
             id: campaigns[0].id,
@@ -110,7 +120,8 @@ export async function GET() {
           amount: order.amount,
           finalAmount: order.finalAmount,
           orderStatus: order.status,
-          paymentStatus: order.payment?.status ?? "PENDING",
+          paymentStatus:
+            order.payment?.status ?? "PENDING",
 
           items: order.items.map((item) => ({
             campaignId: item.campaignId,
@@ -122,8 +133,10 @@ export async function GET() {
           })),
 
           address: delivery?.address ?? "",
-          deliveryStatus: delivery?.status ?? "PENDING",
-          deliveryDate: delivery?.deliveryDate ?? null,
+          deliveryStatus:
+            delivery?.status ?? "PENDING",
+          deliveryDate:
+            delivery?.deliveryDate ?? null,
 
           createdAt: order.createdAt,
         };
@@ -135,7 +148,6 @@ export async function GET() {
     return NextResponse.json(
       {
         error: "Une erreur est survenue.",
-        details: String(error),
       },
       { status: 500 }
     );

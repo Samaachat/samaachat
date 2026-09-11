@@ -1,27 +1,11 @@
-import { prisma } from "@/lib/prisma";
+import { getAdminFromRequest } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   try {
-    const cookieHeader = request.headers.get("cookie");
+    const user = await getAdminFromRequest(request);
 
-    const match = cookieHeader?.match(/(?:^|;\s*)samaachat_admin=([^;]+)/);
-    const adminId = match?.[1];
-
-    if (!adminId) {
-      return NextResponse.json(
-        { authenticated: false },
-        { status: 401 }
-      );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: Number(adminId),
-      },
-    });
-
-    if (!user || user.role !== "ADMIN") {
+    if (!user) {
       return NextResponse.json(
         { authenticated: false },
         { status: 401 }
@@ -38,10 +22,10 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Erreur vérification admin :", error);
+    console.error("Admin auth error:", error);
 
     return NextResponse.json(
-      { authenticated: false },
+      { error: "Erreur serveur." },
       { status: 500 }
     );
   }

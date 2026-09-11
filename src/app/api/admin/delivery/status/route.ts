@@ -1,3 +1,4 @@
+import { getAdminFromRequest } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -21,6 +22,15 @@ const nextStatus: Record<
 
 export async function PATCH(request: Request) {
   try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json(
+        { error: "Accès administrateur requis." },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
     const orderId = Number(body.orderId);
@@ -61,7 +71,6 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Une commande annulée ne peut jamais être livrée.
     if (delivery.order.status === "CANCELLED") {
       return NextResponse.json(
         {
@@ -72,7 +81,6 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Une commande doit être confirmée avant de commencer sa livraison.
     if (
       status === "PREPARING" &&
       delivery.order.status !== "CONFIRMED"
@@ -86,7 +94,6 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Une livraison terminée est définitive.
     if (delivery.status === "DELIVERED") {
       return NextResponse.json(
         {
@@ -97,7 +104,6 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Vérifie que l'on avance exactement d'une étape.
     if (
       delivery.status !== status &&
       nextStatus[

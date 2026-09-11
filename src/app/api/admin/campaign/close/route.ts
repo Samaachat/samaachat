@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAdminFromRequest } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Accès administrateur requis.",
+        },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
     const campaignId = Number(body.campaignId);
@@ -59,7 +72,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Aucun palier de prix ne correspond à la quantité finale.",
+          message:
+            "Aucun palier de prix ne correspond à la quantité finale.",
         },
         { status: 400 }
       );
@@ -69,16 +83,12 @@ export async function POST(request: NextRequest) {
     let itemsUpdated = 0;
 
     await prisma.$transaction(async (tx) => {
-      // Récupérer uniquement les articles appartenant
-      // à la campagne que l'administrateur veut clôturer.
       const campaignItems = await tx.orderItem.findMany({
         where: {
           campaignId: campaign.id,
         },
       });
 
-      // Appliquer le prix final uniquement aux articles
-      // de cette campagne.
       for (const item of campaignItems) {
         await tx.orderItem.update({
           where: {
@@ -93,7 +103,6 @@ export async function POST(request: NextRequest) {
         itemsUpdated++;
       }
 
-      // Récupérer les commandes concernées.
       const orderIds = [
         ...new Set(campaignItems.map((item) => item.orderId)),
       ];
@@ -105,8 +114,6 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Recalculer le montant total de la commande
-        // à partir de tous ses produits.
         const totalAmount = orderItems.reduce(
           (total, item) => total + item.amount,
           0
@@ -124,7 +131,6 @@ export async function POST(request: NextRequest) {
         ordersUpdated++;
       }
 
-      // Enfin, clôturer UNIQUEMENT la campagne sélectionnée.
       await tx.campaign.update({
         where: {
           id: campaign.id,

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createAdminSession, ADMIN_COOKIE } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -16,24 +17,24 @@ export async function POST(request: Request) {
     }
 
     const user = await prisma.user.findUnique({
-      where: {
-        phone,
-      },
+      where: { phone },
     });
 
     if (!user || user.role !== "ADMIN") {
       return NextResponse.json(
-        { error: "Accès administrateur refusé." },
-        { status: 403 }
+        { error: "Identifiants incorrects." },
+        { status: 401 }
       );
     }
 
     if (!user.password || user.password !== password) {
       return NextResponse.json(
-        { error: "Mot de passe incorrect." },
+        { error: "Identifiants incorrects." },
         { status: 401 }
       );
     }
+
+    const sessionToken = createAdminSession(user.id);
 
     const response = NextResponse.json({
       success: true,
@@ -46,20 +47,24 @@ export async function POST(request: Request) {
       },
     });
 
-    response.cookies.set("samaachat_admin", String(user.id), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 8,
-    });
+    response.cookies.set(
+      ADMIN_COOKIE.name,
+      sessionToken,
+      {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: ADMIN_COOKIE.maxAge,
+      }
+    );
 
     return response;
   } catch (error) {
-    console.error("Erreur connexion admin :", error);
+    console.error("Admin login error:", error);
 
     return NextResponse.json(
-      { error: "Une erreur est survenue." },
+      { error: "Erreur serveur." },
       { status: 500 }
     );
   }

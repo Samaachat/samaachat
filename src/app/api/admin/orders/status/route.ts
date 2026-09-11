@@ -1,3 +1,4 @@
+import { getAdminFromRequest } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -12,6 +13,15 @@ type AllowedStatus = (typeof allowedStatuses)[number];
 
 export async function PATCH(request: Request) {
   try {
+    const admin = await getAdminFromRequest(request);
+
+    if (!admin) {
+      return NextResponse.json(
+        { error: "Accès administrateur requis." },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
     const orderId = Number(body.orderId);
@@ -69,8 +79,10 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Une commande ne peut être confirmée que si le paiement est PAID.
-    if (status === "CONFIRMED" && order.payment?.status !== "PAID") {
+    if (
+      status === "CONFIRMED" &&
+      order.payment?.status !== "PAID"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -98,7 +110,10 @@ export async function PATCH(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Erreur changement statut commande :", error);
+    console.error(
+      "Erreur changement statut commande :",
+      error
+    );
 
     return NextResponse.json(
       { error: "Une erreur est survenue." },

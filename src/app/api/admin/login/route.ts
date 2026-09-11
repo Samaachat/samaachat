@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { createAdminSession, ADMIN_COOKIE } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
@@ -27,7 +28,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!user.password || user.password !== password) {
+    if (
+  !user.password ||
+  !(await bcrypt.compare(password, user.password))
+) {
       return NextResponse.json(
         { error: "Identifiants incorrects." },
         { status: 401 }

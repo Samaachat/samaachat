@@ -689,43 +689,32 @@ export default function AdminDashboardPage() {
 
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
-                          {order.orderStatus === "PENDING" && (
-                            <button
-                              onClick={() =>
-                                updateOrderStatus(
-                                  order.id,
-                                  "CONFIRMED"
-                                )
-                              }
-                              disabled={
-                                updatingOrderId === order.id
-                              }
-                              className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {updatingOrderId === order.id
-                                ? "..."
-                                : "Confirmer"}
-                            </button>
-                          )}
+                          {order.orderStatus === "PENDING" &&
+                            order.paymentStatus === "PAID" && (
+                              <button
+                                onClick={() =>
+                                  updateOrderStatus(
+                                    order.id,
+                                    "CONFIRMED"
+                                  )
+                                }
+                                disabled={
+                                  updatingOrderId === order.id
+                                }
+                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {updatingOrderId === order.id
+                                  ? "..."
+                                  : "Confirmer"}
+                              </button>
+                            )}
 
-                          {order.orderStatus === "CONFIRMED" && (
-                            <button
-                              onClick={() =>
-                                updateOrderStatus(
-                                  order.id,
-                                  "DELIVERED"
-                                )
-                              }
-                              disabled={
-                                updatingOrderId === order.id
-                              }
-                              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {updatingOrderId === order.id
-                                ? "..."
-                                : "Marquer livrée"}
-                            </button>
-                          )}
+                          {order.orderStatus === "PENDING" &&
+                            order.paymentStatus !== "PAID" && (
+                              <span className="rounded-lg bg-yellow-50 px-3 py-2 text-xs font-bold text-yellow-700">
+                                Paiement requis
+                              </span>
+                            )}
 
                           {order.orderStatus !== "DELIVERED" &&
                             order.orderStatus !== "CANCELLED" && (

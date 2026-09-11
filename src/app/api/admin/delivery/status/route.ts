@@ -8,19 +8,36 @@ const allowedStatuses = [
   "DELIVERED",
 ] as const;
 
+type DeliveryStatus = (typeof allowedStatuses)[number];
+
+const nextStatus: Record<
+  Exclude<DeliveryStatus, "DELIVERED">,
+  DeliveryStatus
+> = {
+  PENDING: "PREPARING",
+  PREPARING: "OUT_FOR_DELIVERY",
+  OUT_FOR_DELIVERY: "DELIVERED",
+};
+
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
 
     const orderId = Number(body.orderId);
-    const status = String(body.status ?? "");
+    const status = String(body.status ?? "")
+      .trim()
+      .toUpperCase() as DeliveryStatus;
 
-    if (
-      !Number.isInteger(orderId) ||
-      !allowedStatuses.includes(status as never)
-    ) {
+    if (!Number.isInteger(orderId) || orderId < 1) {
       return NextResponse.json(
-        { error: "Données invalides." },
+        { error: "Commande invalide." },
+        { status: 400 }
+      );
+    }
+
+    if (!allowedStatuses.includes(status)) {
+      return NextResponse.json(
+        { error: "Statut de livraison invalide." },
         { status: 400 }
       );
     }
@@ -29,46 +46,102 @@ export async function PATCH(request: Request) {
       where: {
         orderId,
       },
+      include: {
+        order: true,
+      },
     });
 
     if (!delivery) {
       return NextResponse.json(
-        { error: "Aucune livraison trouvée pour cette commande." },
+        {
+          error:
+            "Aucune livraison trouvée pour cette commande.",
+        },
         { status: 404 }
       );
     }
 
-    const updatedDelivery = await prisma.$transaction(async (tx) => {
-      const updated = await tx.delivery.update({
-        where: {
-          orderId,
+    // Une commande annulée ne peut jamais être livrée.
+    if (delivery.order.status === "CANCELLED") {
+      return NextResponse.json(
+        {
+          error:
+            "Une commande annulée ne peut pas être livrée.",
         },
-        data: {
-          status: status as
-            | "PENDING"
-            | "PREPARING"
-            | "OUT_FOR_DELIVERY"
-            | "DELIVERED",
-          deliveryDate:
-            status === "DELIVERED"
-              ? delivery.deliveryDate ?? new Date()
-              : delivery.deliveryDate,
-        },
-      });
+        { status: 400 }
+      );
+    }
 
-      if (status === "DELIVERED") {
-        await tx.order.update({
+    // Une commande doit être confirmée avant de commencer sa livraison.
+    if (
+      status === "PREPARING" &&
+      delivery.order.status !== "CONFIRMED"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "La commande doit être confirmée avant sa préparation.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Une livraison terminée est définitive.
+    if (delivery.status === "DELIVERED") {
+      return NextResponse.json(
+        {
+          error:
+            "Une livraison déjà terminée ne peut pas être modifiée.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Vérifie que l'on avance exactement d'une étape.
+    if (
+      delivery.status !== status &&
+      nextStatus[
+        delivery.status as Exclude<DeliveryStatus, "DELIVERED">
+      ] !== status
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            `Transition de livraison invalide : ${delivery.status} → ${status}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const updatedDelivery = await prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.delivery.update({
           where: {
-            id: orderId,
+            orderId,
           },
           data: {
-            status: "DELIVERED",
+            status,
+            deliveryDate:
+              status === "DELIVERED"
+                ? delivery.deliveryDate ?? new Date()
+                : delivery.deliveryDate,
           },
         });
-      }
 
-      return updated;
-    });
+        if (status === "DELIVERED") {
+          await tx.order.update({
+            where: {
+              id: orderId,
+            },
+            data: {
+              status: "DELIVERED",
+            },
+          });
+        }
+
+        return updated;
+      }
+    );
 
     return NextResponse.json({
       success: true,
@@ -84,7 +157,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       {
         error: "Une erreur est survenue.",
-        details: String(error),
       },
       { status: 500 }
     );

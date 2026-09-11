@@ -1,377 +1,198 @@
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
 
-type OrderItemInput = {
-  campaignId: number;
-  quantity: number;
-};
-
-type CalculatedItem = {
-  campaignId: number;
-  quantity: number;
-  unitPrice: number;
-  amount: number;
-};
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const name = String(body.name ?? "").trim();
-    const phone = String(body.phone ?? "").trim();
-    const address = String(body.address ?? "").trim();
+    const campaignId = Number(body.campaignId);
 
-    const rawItems: unknown[] = Array.isArray(body.items)
-      ? body.items
-      : [];
-
-    if (!name || !phone || !address || rawItems.length === 0) {
+    if (!Number.isInteger(campaignId) || campaignId < 1) {
       return NextResponse.json(
         {
-          error:
-            "Veuillez renseigner votre nom, votre téléphone, votre adresse et au moins un produit.",
+          success: false,
+          error: "Campagne invalide.",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * On ne fait confiance qu'à campaignId et quantity.
-     * Le prix envoyé par le navigateur est volontairement ignoré.
-     */
-    const items: OrderItemInput[] = rawItems.map((item) => {
-      const data = item as Record<string, unknown>;
-
-      return {
-        campaignId: Number(data.campaignId),
-        quantity: Number(data.quantity),
-      };
-    });
-
-    /*
-     * Vérifications de base.
-     */
-    const invalidItem = items.some(
-      (item) =>
-        !Number.isInteger(item.campaignId) ||
-        item.campaignId < 1 ||
-        !Number.isInteger(item.quantity) ||
-        item.quantity < 1
-    );
-
-    if (invalidItem) {
-      return NextResponse.json(
-        {
-          error: "Un produit ou une quantité est invalide.",
-        },
-        { status: 400 }
-      );
-    }
-
-    /*
-     * Une campagne ne peut apparaître qu'une seule fois
-     * dans une même commande.
-     */
-    const uniqueCampaignIds = new Set(
-      items.map((item) => item.campaignId)
-    );
-
-    if (uniqueCampaignIds.size !== items.length) {
-      return NextResponse.json(
-        {
-          error:
-            "Un même produit ne peut pas être sélectionné plusieurs fois.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const campaignIds = items.map(
-      (item) => item.campaignId
-    );
-
-    /*
-     * On récupère les campagnes directement depuis la base.
-     *
-     * Le client ne peut donc pas imposer :
-     * - le prix ;
-     * - le statut de la campagne ;
-     * - la quantité actuelle.
-     */
-    const campaigns = await prisma.campaign.findMany({
+    const campaign = await prisma.campaign.findUnique({
       where: {
-        id: {
-          in: campaignIds,
-        },
-        status: "ACTIVE",
+        id: campaignId,
       },
       include: {
         product: true,
         priceTiers: {
           orderBy: {
-            minQuantity: "asc",
+            minQuantity: "desc",
           },
         },
       },
     });
 
-    /*
-     * Toutes les campagnes demandées doivent exister
-     * et être encore actives.
-     */
-    if (campaigns.length !== items.length) {
+    if (!campaign) {
       return NextResponse.json(
         {
-          error:
-            "Un des produits sélectionnés n'est plus disponible.",
+          success: false,
+          error: "Campagne introuvable.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (campaign.status !== "ACTIVE") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Cette campagne n'est plus active.",
         },
         { status: 400 }
       );
     }
 
     /*
-     * Calcul du prix côté serveur.
+     * Le palier final correspond à la quantité totale
+     * atteinte par cette campagne au moment de sa clôture.
      */
-    const calculatedItems: CalculatedItem[] = [];
+    const finalTier = campaign.priceTiers.find(
+      (tier) => campaign.currentQuantity >= tier.minQuantity
+    );
 
-    for (const item of items) {
-      const campaign = campaigns.find(
-        (campaign) =>
-          campaign.id === item.campaignId
+    if (!finalTier) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Aucun palier de prix ne correspond à la quantité finale.",
+        },
+        { status: 400 }
       );
-
-      if (!campaign) {
-        return NextResponse.json(
-          {
-            error:
-              "Une des campagnes sélectionnées est introuvable.",
-          },
-          { status: 400 }
-        );
-      }
-
-      /*
-       * Quantité totale de la campagne après cette commande.
-       */
-      const newQuantity =
-        campaign.currentQuantity +
-        item.quantity;
-
-      /*
-       * On interdit de dépasser l'objectif
-       * de la campagne.
-       */
-      if (newQuantity > campaign.targetQuantity) {
-        return NextResponse.json(
-          {
-            error:
-              `La quantité disponible pour ${campaign.product.name} ` +
-              `est insuffisante. Il reste seulement ` +
-              `${Math.max(
-                campaign.targetQuantity -
-                  campaign.currentQuantity,
-                0
-              )} unité(s) disponible(s).`,
-          },
-          { status: 400 }
-        );
-      }
-
-      /*
-       * Le prix doit obligatoirement correspondre
-       * à un palier valide.
-       *
-       * Aucun prix de secours n'est utilisé.
-       */
-      const priceTier =
-        campaign.priceTiers.find(
-          (tier) =>
-            newQuantity >= tier.minQuantity &&
-            newQuantity <= tier.maxQuantity
-        );
-
-      if (!priceTier) {
-        return NextResponse.json(
-          {
-            error:
-              `Aucun palier de prix ne correspond ` +
-              `à la quantité prévue pour ${campaign.product.name}.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      const unitPrice = priceTier.price;
-
-      const amount =
-        item.quantity * unitPrice;
-
-      calculatedItems.push({
-        campaignId: campaign.id,
-        quantity: item.quantity,
-        unitPrice,
-        amount,
-      });
     }
 
-    /*
-     * Total de la commande.
-     */
-    const totalAmount =
-      calculatedItems.reduce(
-        (total, item) =>
-          total + item.amount,
-        0
-      );
+    let ordersUpdated = 0;
+    let itemsUpdated = 0;
 
-    const totalQuantity =
-      calculatedItems.reduce(
-        (total, item) =>
-          total + item.quantity,
-        0
-      );
-
-    /*
-     * Création ou récupération du client.
-     */
-    const user = await prisma.user.upsert({
-      where: {
-        phone,
-      },
-      update: {
-        name,
-      },
-      create: {
-        name,
-        phone,
-        role: "CUSTOMER",
-      },
-    });
-
-    /*
-     * Création atomique de la commande.
-     *
-     * Si une opération échoue :
-     * - la commande n'est pas créée ;
-     * - les OrderItem ne sont pas créés ;
-     * - les quantités de campagne ne sont pas augmentées ;
-     * - la livraison n'est pas créée.
-     */
-    const result = await prisma.$transaction(
-      async (tx) => {
-        const firstItem =
-          calculatedItems[0];
-
-        /*
-         * Le modèle Order actuel conserve
-         * campaignId / quantity / unitPrice / amount
-         * pour compatibilité.
-         *
-         * Les détails complets sont dans OrderItem.
-         */
-        const order =
-          await tx.order.create({
-            data: {
-              userId: user.id,
-
-              campaignId:
-                firstItem.campaignId,
-
-              quantity:
-                totalQuantity,
-
-              unitPrice:
-                firstItem.unitPrice,
-
-              amount:
-                totalAmount,
-            },
-          });
-
-        /*
-         * Création de chaque ligne de commande.
-         */
-        for (const item of calculatedItems) {
-          await tx.orderItem.create({
-            data: {
-              orderId:
-                order.id,
-
-              campaignId:
-                item.campaignId,
-
-              quantity:
-                item.quantity,
-
-              unitPrice:
-                item.unitPrice,
-
-              amount:
-                item.amount,
-            },
-          });
-
-          /*
-           * Mise à jour de la quantité
-           * de la campagne.
-           */
-          await tx.campaign.update({
-            where: {
-              id: item.campaignId,
-            },
-            data: {
-              currentQuantity: {
-                increment:
-                  item.quantity,
+    await prisma.$transaction(async (tx) => {
+      /*
+       * Récupération uniquement des OrderItem
+       * appartenant à la campagne clôturée.
+       */
+      const campaignItems = await tx.orderItem.findMany({
+        where: {
+          campaignId: campaign.id,
+        },
+        include: {
+          order: {
+            include: {
+              items: {
+                include: {
+                  campaign: true,
+                },
               },
             },
-          });
-        }
+          },
+        },
+      });
 
-        /*
-         * Création de la livraison.
-         */
-        await tx.delivery.create({
+      /*
+       * Mise à jour du prix de chaque article
+       * de cette campagne.
+       */
+      for (const item of campaignItems) {
+        await tx.orderItem.update({
+          where: {
+            id: item.id,
+          },
           data: {
-            orderId:
-              order.id,
-
-            address,
-
-            status:
-              "PENDING",
+            unitPrice: finalTier.price,
+            amount: item.quantity * finalTier.price,
           },
         });
 
-        return order;
+        itemsUpdated++;
       }
-    );
 
-    /*
-     * Réponse au navigateur.
-     */
+      /*
+       * Chaque commande peut contenir plusieurs campagnes.
+       *
+       * Après modification des articles de cette campagne,
+       * on recalcule le montant total de chaque commande.
+       */
+      const orderIds = [
+        ...new Set(campaignItems.map((item) => item.orderId)),
+      ];
+
+      for (const orderId of orderIds) {
+        const orderItems = await tx.orderItem.findMany({
+          where: {
+            orderId,
+          },
+          include: {
+            campaign: true,
+          },
+        });
+
+        const totalAmount = orderItems.reduce(
+          (total, item) => total + item.amount,
+          0
+        );
+
+        /*
+         * Une commande est complètement finalisée uniquement
+         * lorsque toutes les campagnes de ses articles sont
+         * elles-mêmes clôturées.
+         */
+        const allCampaignsCompleted = orderItems.every(
+          (item) => item.campaign.status === "COMPLETED"
+        );
+
+        await tx.order.update({
+          where: {
+            id: orderId,
+          },
+          data: {
+            amount: totalAmount,
+            finalAmount: allCampaignsCompleted
+              ? totalAmount
+              : null,
+          },
+        });
+
+        ordersUpdated++;
+      }
+
+      /*
+       * La campagne est clôturée en dernier.
+       *
+       * Cela permet aux calculs ci-dessus de voir son ancien
+       * statut ACTIVE. Nous mettons ensuite son statut à COMPLETED.
+       */
+      await tx.campaign.update({
+        where: {
+          id: campaign.id,
+        },
+        data: {
+          status: "COMPLETED",
+        },
+      });
+    });
+
     return NextResponse.json({
       success: true,
-
-      orderId:
-        result.id,
-
-      amount:
-        totalAmount,
-
-      items:
-        calculatedItems,
+      campaignId: campaign.id,
+      product: campaign.product.name,
+      finalUnitPrice: finalTier.price,
+      ordersUpdated,
+      itemsUpdated,
     });
   } catch (error) {
-    console.error(
-      "Erreur création commande :",
-      error
-    );
+    console.error("Erreur clôture campagne :", error);
 
     return NextResponse.json(
       {
-        error:
-          "Une erreur est survenue.",
+        success: false,
+        error: "Impossible de clôturer la campagne.",
       },
       { status: 500 }
     );

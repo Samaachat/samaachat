@@ -67,6 +67,9 @@ export default function AdminDashboardPage() {
   );
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
+  const [orderFilter, setOrderFilter] = useState("ALL");
+  const [orderSearch, setOrderSearch] = useState("");
+
   async function loadDashboard() {
     try {
       const authResponse = await fetch("/api/admin/me");
@@ -265,6 +268,55 @@ export default function AdminDashboardPage() {
           tier.minQuantity > (campaign?.currentQuantity ?? 0)
       )
       .at(0) ?? null;
+
+  const normalizedSearch = orderSearch.trim().toLowerCase();
+
+  const filteredOrders = orders.filter((order) => {
+    const matchesSearch =
+      normalizedSearch === "" ||
+      order.customer.toLowerCase().includes(normalizedSearch) ||
+      order.phone.toLowerCase().includes(normalizedSearch);
+
+    let matchesFilter = true;
+
+    switch (orderFilter) {
+      case "PAYMENT_PENDING":
+        matchesFilter = order.paymentStatus !== "PAID";
+        break;
+
+      case "TO_CONFIRM":
+        matchesFilter =
+          order.orderStatus === "PENDING" &&
+          order.paymentStatus === "PAID";
+        break;
+
+      case "TO_PREPARE":
+        matchesFilter =
+          order.orderStatus === "CONFIRMED" &&
+          order.deliveryStatus === "PENDING";
+        break;
+
+      case "IN_DELIVERY":
+        matchesFilter =
+          order.deliveryStatus === "OUT_FOR_DELIVERY";
+        break;
+
+      case "DELIVERED":
+        matchesFilter =
+          order.orderStatus === "DELIVERED" ||
+          order.deliveryStatus === "DELIVERED";
+        break;
+
+      case "CANCELLED":
+        matchesFilter = order.orderStatus === "CANCELLED";
+        break;
+
+      default:
+        matchesFilter = true;
+    }
+
+    return matchesSearch && matchesFilter;
+  });
 
   return (
     <main className="min-h-screen bg-slate-100 p-6">
@@ -497,7 +549,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm md:p-8">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-2xl font-black text-slate-900">
                 Commandes
@@ -508,15 +560,41 @@ export default function AdminDashboardPage() {
               </p>
             </div>
 
-            <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">
-              {orders.length}
+            <span className="w-fit rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">
+              {filteredOrders.length} / {orders.length}
             </span>
           </div>
 
-          {orders.length === 0 ? (
+          <div className="mt-6 grid gap-3 md:grid-cols-[1fr_auto]">
+            <input
+              type="search"
+              value={orderSearch}
+              onChange={(event) => setOrderSearch(event.target.value)}
+              placeholder="Rechercher par nom ou téléphone..."
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
+            />
+
+            <select
+              value={orderFilter}
+              onChange={(event) => setOrderFilter(event.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
+            >
+              <option value="ALL">Toutes</option>
+              <option value="PAYMENT_PENDING">
+                Paiement en attente
+              </option>
+              <option value="TO_CONFIRM">À confirmer</option>
+              <option value="TO_PREPARE">À préparer</option>
+              <option value="IN_DELIVERY">En livraison</option>
+              <option value="DELIVERED">Livrées</option>
+              <option value="CANCELLED">Annulées</option>
+            </select>
+          </div>
+
+          {filteredOrders.length === 0 ? (
             <div className="mt-6 rounded-2xl bg-slate-50 p-6 text-center">
               <p className="font-bold text-slate-700">
-                Aucune commande
+                Aucune commande ne correspond à votre recherche.
               </p>
             </div>
           ) : (
@@ -537,7 +615,7 @@ export default function AdminDashboardPage() {
                 </thead>
 
                 <tbody>
-                  {orders.map((order) => (
+                  {filteredOrders.map((order) => (
                     <tr
                       key={order.id}
                       className="border-b border-slate-100 last:border-0"

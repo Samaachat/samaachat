@@ -466,11 +466,33 @@ export default function RejoindrePage() {
                           : ""
                       }`}
                     >
-                      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-green-700">
-                            ACHAT GROUPÉ
-                          </p>
+                      <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-stretch">
+                        {campaign.product.name
+                          .toLowerCase()
+                          .includes("riz") && (
+                          <div className="overflow-hidden rounded-2xl bg-slate-100">
+                            <img
+                              src="/images/campagnes/riz-50kg.png"
+                              alt="Campagne riz brisé ordinaire 50 kg"
+                              className="h-56 w-full object-cover md:h-full"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex flex-col justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-green-800">
+                                ACHAT GROUPÉ
+                              </span>
+                              <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-800">
+                                Prix dégressifs
+                              </span>
+                            </div>
+
+                            <h2 className="mt-3 text-2xl font-black text-slate-950 md:text-3xl">
+                              {campaign.product.name}
+                            </h2>
 
                           <h2 className="mt-1 text-2xl font-black">
                             {
@@ -488,27 +510,46 @@ export default function RejoindrePage() {
                             }
                           </p>
 
-                          <p className="mt-3 font-bold text-green-700">
-                            {price.toLocaleString(
-                              "fr-FR"
-                            )}{" "}
-                            FCFA /{" "}
-                            {campaign.product.unit.toLowerCase()}
-                          </p>
+                          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                                Prix actuel
+                              </p>
+                              <p className="mt-1 text-2xl font-black text-green-700">
+                                {price.toLocaleString(
+                                  "fr-FR"
+                                )}{" "}
+                                FCFA
+                                <span className="ml-1 text-sm font-bold text-slate-500">
+                                  / {campaign.product.unit.toLowerCase()}
+                                </span>
+                              </p>
+                            </div>
+                            <p className="text-sm font-bold text-slate-600">
+                              {campaign.currentQuantity} / {campaign.targetQuantity}
+                            </p>
+                          </div>
 
-                          <p className="mt-1 text-xs text-slate-500">
-                            {
-                              campaign.currentQuantity
-                            }{" "}
-                            /{" "}
-                            {
-                              campaign.targetQuantity
-                            }{" "}
-                            déjà commandés
+                          <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className="h-full rounded-full bg-green-600 transition-all"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (campaign.currentQuantity /
+                                    Math.max(1, campaign.targetQuantity)) *
+                                    100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+
+                          <p className="mt-2 text-xs font-medium text-slate-500">
+                            Plus nous sommes nombreux, plus le prix baisse.
                           </p>
                         </div>
 
-                        <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 md:w-64">
+                        <div className="mt-5 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3 md:mt-0 md:w-64 md:self-end">
                           <button
                             type="button"
                             onClick={() =>
@@ -555,21 +596,20 @@ export default function RejoindrePage() {
                         </div>
                       </div>
 
-                      {quantity >
-                        0 && (
-                        <div className="mt-5 border-t border-slate-100 pt-4 text-right">
-                          <span className="text-sm text-slate-500">
-                            Sous-total :{" "}
-                          </span>
-
-                          <span className="text-lg font-black text-green-700">
-                            {productTotal.toLocaleString(
-                              "fr-FR"
-                            )}{" "}
-                            FCFA
-                          </span>
-                        </div>
-                      )}
+                        {quantity > 0 && (
+                          <div className="mt-5 rounded-2xl bg-green-50 px-4 py-3 text-right">
+                            <span className="text-sm font-medium text-slate-500">
+                              Sous-total :{" "}
+                            </span>
+                            <span className="text-lg font-black text-green-700">
+                              {productTotal.toLocaleString(
+                                "fr-FR"
+                              )}{" "}
+                              FCFA
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 }
@@ -604,6 +644,7 @@ export default function RejoindrePage() {
                           key={
                             item.campaignId
                           }
+                        
                           className="flex items-center justify-between border-b border-green-100 pb-3"
                         >
                           <div>

@@ -30,6 +30,35 @@ export default function Home() {
   const [cartCount, setCartCount] = useState(0);
   const [addedProduct, setAddedProduct] = useState("");
 
+  function getCampaignImage(productName: string) {
+    const name = productName.toLowerCase();
+
+    if (name.includes("riz")) {
+      return "/images/campagnes/riz-50kg.png";
+    }
+
+    if (name.includes("huile")) {
+      return "/images/campagnes/huile-5l.png";
+    }
+
+    if (name.includes("oignon")) {
+      return "/images/campagnes/oignon-25kg.png";
+    }
+
+    if (name.includes("sucre")) {
+      return "/images/campagnes/sucre-50kg.png";
+    }
+
+    if (
+      name.includes("pomme") ||
+      name.includes("terre")
+    ) {
+      return "/images/campagnes/pomme-de-terre-25kg.png";
+    }
+
+    return null;
+  }
+
   useEffect(() => {
     async function loadCampaigns() {
       try {
@@ -252,40 +281,43 @@ export default function Home() {
                       tier.minQuantity > currentQuantity
                   );
 
+                const campaignImage = getCampaignImage(
+                  campaign.product.name
+                );
+
                 return (
                   <article
                     key={campaign.id}
-                    className="overflow-hidden rounded-3xl border bg-white shadow-sm"
+                    className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
                   >
-                    {campaign.product.name
-                      .toLowerCase()
-                      .includes("riz") && (
-                      <div className="h-56 overflow-hidden bg-slate-50">
+                    {campaignImage && (
+                      <div className="flex h-64 items-center justify-center bg-slate-50 p-5 sm:h-72">
                         <img
-                          src="/images/campagnes/riz-50kg.png"
-                          alt="Riz brisé ordinaire 50 kg"
-                          className="h-full w-full object-cover"
+                          src={campaignImage}
+                          alt={campaign.product.name}
+                          className="h-full w-full object-contain object-center"
                         />
                       </div>
                     )}
+
                     <div className="p-6 md:p-8">
-                      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-                        <div>
-                          <p className="text-sm font-semibold uppercase tracking-wide text-green-700">
+                      <div className="flex flex-col gap-5">
+                        <div className="text-center">
+                          <p className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-green-800">
                             Campagne en cours
                           </p>
 
-                          <h3 className="mt-2 text-2xl font-bold text-green-950">
+                          <h3 className="mt-3 text-2xl font-black text-green-950 md:text-3xl">
                             {campaign.product.name}
                           </h3>
 
-                          <p className="mt-2 text-gray-600">
+                          <p className="mx-auto mt-2 max-w-xl text-gray-600">
                             {campaign.product.description}
                           </p>
                         </div>
 
-                        <div className="rounded-2xl bg-yellow-100 px-5 py-4 text-center">
-                          <p className="text-sm text-gray-600">
+                        <div className="mx-auto w-full max-w-xs rounded-2xl bg-yellow-100 px-5 py-4 text-center">
+                          <p className="text-sm font-semibold text-gray-600">
                             Prix actuel
                           </p>
 

@@ -494,14 +494,6 @@ export default function RejoindrePage() {
                               {campaign.product.name}
                             </h2>
 
-                          <h2 className="mt-1 text-2xl font-black">
-                            {
-                              campaign
-                                .product
-                                .name
-                            }
-                          </h2>
-
                           <p className="mt-1 text-sm text-slate-500">
                             {
                               campaign

@@ -30,6 +30,47 @@ type SelectedProduct = {
   price: number;
 };
 
+function getCampaignImage(productName: string) {
+  const name = productName.toLowerCase();
+
+  if (name.includes("riz")) {
+    return {
+      src: "/images/campagnes/riz-50kg.png",
+      alt: "Riz brisé ordinaire 50 kg",
+    };
+  }
+
+  if (name.includes("huile")) {
+    return {
+      src: "/images/campagnes/huile-5l.png",
+      alt: "Huile végétale 5 litres",
+    };
+  }
+
+  if (name.includes("oignon")) {
+    return {
+      src: "/images/campagnes/oignon-25kg.png",
+      alt: "Oignon 25 kg",
+    };
+  }
+
+  if (name.includes("sucre")) {
+    return {
+      src: "/images/campagnes/sucre-50kg.png",
+      alt: "Sucre 50 kg",
+    };
+  }
+
+  if (name.includes("pomme") && name.includes("terre")) {
+    return {
+      src: "/images/campagnes/pomme-de-terre-25kg.png",
+      alt: "Pomme de terre 25 kg",
+    };
+  }
+
+  return null;
+}
+
 export default function RejoindrePage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selected, setSelected] = useState<SelectedProduct[]>([]);
@@ -455,6 +496,10 @@ export default function RejoindrePage() {
                     quantity *
                     price;
 
+                  const campaignImage = getCampaignImage(
+                    campaign.product.name
+                  );
+
                   return (
                     <div
                       key={
@@ -466,14 +511,18 @@ export default function RejoindrePage() {
                           : ""
                       }`}
                     >
-                      <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-stretch">
-                        {campaign.product.name
-                          .toLowerCase()
-                          .includes("riz") && (
+                      <div
+                        className={
+                          campaignImage
+                            ? "grid gap-6 md:grid-cols-[280px_1fr] md:items-stretch"
+                            : ""
+                        }
+                      >
+                        {campaignImage && (
                           <div className="overflow-hidden rounded-2xl bg-slate-100">
                             <img
-                              src="/images/campagnes/riz-50kg.png"
-                              alt="Campagne riz brisé ordinaire 50 kg"
+                              src={campaignImage.src}
+                              alt={campaignImage.alt}
                               className="h-56 w-full object-cover md:h-full"
                             />
                           </div>

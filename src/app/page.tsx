@@ -257,6 +257,17 @@ export default function Home() {
                     key={campaign.id}
                     className="overflow-hidden rounded-3xl border bg-white shadow-sm"
                   >
+                    {campaign.product.name
+                      .toLowerCase()
+                      .includes("riz") && (
+                      <div className="h-56 overflow-hidden bg-slate-50">
+                        <img
+                          src="/images/campagnes/riz-50kg.png"
+                          alt="Riz brisé ordinaire 50 kg"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    )}
                     <div className="p-6 md:p-8">
                       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                         <div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { getCampaignUnitPrice } from "@/lib/campaign-prices";
 
 type OrderItemInput = {
   campaignId: number;
@@ -220,22 +220,11 @@ export async function POST(request: NextRequest) {
       }
 
       /*
-       * Déterminer le prix à partir des paliers.
+       * Prix unique défini par produit.
+       * Les anciens paliers en base sont conservés pour le moment
+       * mais ne sont plus utilisés pour calculer la commande.
        */
-      const tier = campaign.priceTiers.find(
-        (priceTier) =>
-          item.quantity >= priceTier.minQuantity &&
-          item.quantity <= priceTier.maxQuantity
-      );
-
-      /*
-       * Si aucun palier ne correspond, on utilise
-       * le premier palier comme sécurité.
-       */
-      const unitPrice =
-        tier?.price ??
-        campaign.priceTiers[0]?.price ??
-        0;
+      const unitPrice = getCampaignUnitPrice(campaign.product.name);
 
       if (unitPrice <= 0) {
         return NextResponse.json(
@@ -275,12 +264,6 @@ export async function POST(request: NextRequest) {
      * Compatibilité avec le modèle Order historique.
      */
     const firstItem = validatedItems[0];
-
-    /*
-     * Token secret permettant de prouver la possession
-     * de la commande.
-     */
-    const accessToken = crypto.randomBytes(32).toString("hex");
 
     /*
      * Création de la commande dans une transaction.
@@ -361,7 +344,6 @@ export async function POST(request: NextRequest) {
           const order =
             await tx.order.create({
               data: {
-                accessToken,
                 userId: user.id,
 
                 /*
@@ -428,7 +410,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       orderId: result.id,
-      accessToken,
       amount: totalAmount,
     });
   } catch (error) {

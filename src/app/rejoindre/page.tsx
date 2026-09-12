@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getCampaignUnitPrice } from "@/lib/campaign-prices";
 
 type Campaign = {
   id: number;
@@ -30,47 +31,6 @@ type SelectedProduct = {
   price: number;
 };
 
-function getCampaignImage(productName: string) {
-  const name = productName.toLowerCase();
-
-  if (name.includes("riz")) {
-    return {
-      src: "/images/campagnes/riz-50kg.png",
-      alt: "Riz brisé ordinaire 50 kg",
-    };
-  }
-
-  if (name.includes("huile")) {
-    return {
-      src: "/images/campagnes/huile-5l.png",
-      alt: "Huile végétale 5 litres",
-    };
-  }
-
-  if (name.includes("oignon")) {
-    return {
-      src: "/images/campagnes/oignon-25kg.png",
-      alt: "Oignon 25 kg",
-    };
-  }
-
-  if (name.includes("sucre")) {
-    return {
-      src: "/images/campagnes/sucre-50kg.png",
-      alt: "Sucre 50 kg",
-    };
-  }
-
-  if (name.includes("pomme") && name.includes("terre")) {
-    return {
-      src: "/images/campagnes/pomme-de-terre-25kg.png",
-      alt: "Pomme de terre 25 kg",
-    };
-  }
-
-  return null;
-}
-
 export default function RejoindrePage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selected, setSelected] = useState<SelectedProduct[]>([]);
@@ -83,21 +43,8 @@ export default function RejoindrePage() {
 
   const router = useRouter();
 
-  function getPrice(
-    campaign: Campaign,
-    quantity: number
-  ) {
-    const tier = campaign.priceTiers.find(
-      (tier) =>
-        quantity >= tier.minQuantity &&
-        quantity <= tier.maxQuantity
-    );
-
-    return (
-      tier?.price ??
-      campaign.priceTiers[0]?.price ??
-      0
-    );
+  function getPrice(campaign: Campaign, _quantity: number) {
+    return getCampaignUnitPrice(campaign.product.name);
   }
 
   useEffect(() => {
@@ -496,10 +443,6 @@ export default function RejoindrePage() {
                     quantity *
                     price;
 
-                  const campaignImage = getCampaignImage(
-                    campaign.product.name
-                  );
-
                   return (
                     <div
                       key={
@@ -511,18 +454,14 @@ export default function RejoindrePage() {
                           : ""
                       }`}
                     >
-                      <div
-                        className={
-                          campaignImage
-                            ? "grid gap-6 md:grid-cols-[280px_1fr] md:items-stretch"
-                            : ""
-                        }
-                      >
-                        {campaignImage && (
+                      <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-stretch">
+                        {campaign.product.name
+                          .toLowerCase()
+                          .includes("riz") && (
                           <div className="overflow-hidden rounded-2xl bg-slate-100">
                             <img
-                              src={campaignImage.src}
-                              alt={campaignImage.alt}
+                              src="/images/campagnes/riz-50kg.png"
+                              alt="Campagne riz brisé ordinaire 50 kg"
                               className="h-56 w-full object-cover md:h-full"
                             />
                           </div>
@@ -535,7 +474,7 @@ export default function RejoindrePage() {
                                 ACHAT GROUPÉ
                               </span>
                               <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-800">
-                                Prix dégressifs
+                                Prix unique
                               </span>
                             </div>
 

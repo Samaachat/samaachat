@@ -1,153 +1,119 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminFromRequest } from "@/lib/admin-auth";
+import { getCampaignUnitPrice } from "@/lib/campaign-prices";
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const admin = await getAdminFromRequest(request);
 
     if (!admin) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Accès administrateur requis.",
-        },
-        { status: 401 }
+        { success: false, error: "Accès administrateur requis." },
+        { status: 403 }
       );
     }
 
-    const body = await request.json();
-
-    const campaignId = Number(body.campaignId);
+    const body = await request.json().catch(() => null);
+    const campaignId = Number(body?.campaignId);
 
     if (!Number.isInteger(campaignId) || campaignId < 1) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Campagne invalide.",
-        },
+        { success: false, error: "Campagne invalide." },
         { status: 400 }
       );
     }
 
     const campaign = await prisma.campaign.findUnique({
-      where: {
-        id: campaignId,
-      },
+      where: { id: campaignId },
       include: {
         product: true,
-        priceTiers: {
-          orderBy: {
-            minQuantity: "desc",
-          },
-        },
       },
     });
 
     if (!campaign) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Campagne introuvable.",
-        },
+        { success: false, error: "Campagne introuvable." },
         { status: 404 }
       );
     }
 
     if (campaign.status !== "ACTIVE") {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Cette campagne n'est plus active.",
-        },
+        { success: false, error: "Cette campagne n'est plus active." },
         { status: 400 }
       );
     }
 
-    const finalTier = campaign.priceTiers.find(
-      (tier) => campaign.currentQuantity >= tier.minQuantity
-    );
+    const finalUnitPrice = getCampaignUnitPrice(campaign.product.name);
 
-    if (!finalTier) {
+    if (finalUnitPrice <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Aucun palier de prix ne correspond à la quantité finale.",
+          error: `Aucun prix fixe configuré pour ${campaign.product.name}.`,
         },
         { status: 400 }
       );
     }
 
-    let ordersUpdated = 0;
-    let itemsUpdated = 0;
-
-    await prisma.$transaction(async (tx) => {
-      const campaignItems = await tx.orderItem.findMany({
+    const result = await prisma.$transaction(async (tx) => {
+      const items = await tx.orderItem.findMany({
         where: {
-          campaignId: campaign.id,
+          campaignId,
+        },
+        select: {
+          id: true,
+          orderId: true,
+          quantity: true,
         },
       });
 
-      for (const item of campaignItems) {
-        await tx.orderItem.update({
-          where: {
-            id: item.id,
-          },
-          data: {
-            unitPrice: finalTier.price,
-            amount: item.quantity * finalTier.price,
-          },
-        });
+      await tx.orderItem.updateMany({
+        where: {
+          campaignId,
+        },
+        data: {
+          unitPrice: finalUnitPrice,
+        },
+      });
 
-        itemsUpdated++;
-      }
-
-      const orderIds = [
-        ...new Set(campaignItems.map((item) => item.orderId)),
-      ];
+      const orderIds = [...new Set(items.map((item) => item.orderId))];
 
       for (const orderId of orderIds) {
         const orderItems = await tx.orderItem.findMany({
-          where: {
-            orderId,
+          where: { orderId },
+          select: {
+            quantity: true,
+            unitPrice: true,
           },
         });
 
-        const totalAmount = orderItems.reduce(
-          (total, item) => total + item.amount,
+        const amount = orderItems.reduce(
+          (total, item) => total + item.quantity * item.unitPrice,
           0
         );
 
         await tx.order.update({
-          where: {
-            id: orderId,
-          },
-          data: {
-            amount: totalAmount,
-          },
+          where: { id: orderId },
+          data: { amount },
         });
-
-        ordersUpdated++;
       }
 
       await tx.campaign.update({
-        where: {
-          id: campaign.id,
-        },
-        data: {
-          status: "COMPLETED",
-        },
+        where: { id: campaignId },
+        data: { status: "COMPLETED" },
       });
+
+      return {
+        ordersUpdated: orderIds.length,
+      };
     });
 
     return NextResponse.json({
       success: true,
-      campaignId: campaign.id,
-      product: campaign.product.name,
-      finalUnitPrice: finalTier.price,
-      ordersUpdated,
-      itemsUpdated,
+      finalUnitPrice,
+      ordersUpdated: result.ordersUpdated,
     });
   } catch (error) {
     console.error("Erreur clôture campagne :", error);
@@ -155,7 +121,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: "Impossible de clôturer la campagne.",
+        error: "Impossible de clôturer la campagne.",
       },
       { status: 500 }
     );

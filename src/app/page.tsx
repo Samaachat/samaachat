@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getCampaignUnitPrice } from "@/lib/campaign-prices";
 
 type Campaign = {
   id: number;
@@ -268,22 +269,8 @@ export default function Home() {
                   100
                 );
 
-                const currentTier =
-                  campaign.priceTiers.find(
-                    (tier) =>
-                      currentQuantity >= tier.minQuantity &&
-                      currentQuantity <= tier.maxQuantity
-                  ) ?? campaign.priceTiers[0];
-
-                const nextTier =
-                  campaign.priceTiers.find(
-                    (tier) =>
-                      tier.minQuantity > currentQuantity
-                  );
-
-                const campaignImage = getCampaignImage(
-                  campaign.product.name
-                );
+                const unitPrice = getCampaignUnitPrice(campaign.product.name);
+                const campaignImage = getCampaignImage(campaign.product.name);
 
                 return (
                   <article
@@ -322,11 +309,7 @@ export default function Home() {
                           </p>
 
                           <p className="text-2xl font-extrabold text-green-950">
-                            {currentTier
-                              ? currentTier.price.toLocaleString(
-                                  "fr-FR"
-                                )
-                              : "—"}{" "}
+                            {unitPrice.toLocaleString("fr-FR")}{" "}
                             FCFA
                           </p>
                         </div>
@@ -351,24 +334,6 @@ export default function Home() {
                           />
                         </div>
                       </div>
-
-                      {nextTier && (
-                        <div className="mt-5 rounded-2xl bg-green-50 p-4">
-                          <p className="font-semibold text-green-900">
-                            Encore{" "}
-                            {Math.max(
-                              nextTier.minQuantity -
-                                currentQuantity,
-                              0
-                            )}{" "}
-                            unités pour atteindre{" "}
-                            {nextTier.price.toLocaleString(
-                              "fr-FR"
-                            )}{" "}
-                            FCFA.
-                          </p>
-                        </div>
-                      )}
 
                       <div className="mt-8">
                         <button

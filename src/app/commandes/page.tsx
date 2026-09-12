@@ -62,24 +62,109 @@ export default function CommandesPage() {
     setOrders([]);
 
     try {
-      const response = await fetch(
-        `/api/orders/by-phone/${encodeURIComponent(cleanPhone)}`,
-        {
-          method: "GET",
-          cache: "no-store",
+      /*
+       * Les commandes connues par cet appareil sont stockées
+       * avec leur accessToken dans localStorage.
+       *
+       * On utilise ensuite le numéro de téléphone + le token
+       * pour vérifier chaque commande côté serveur.
+       */
+      const orderKeys: string[] = [];
+
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+
+        if (
+          key &&
+          key.startsWith("samaachat_order_")
+        ) {
+          orderKeys.push(key);
         }
-      );
+      }
 
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (orderKeys.length === 0) {
         setError(
-          data.error ?? "Impossible de récupérer vos commandes."
+          "Aucune commande enregistrée sur cet appareil. Utilisez le même appareil que lors de votre commande."
         );
         return;
       }
 
-      setOrders(data.orders ?? []);
+      const results = await Promise.all(
+        orderKeys.map(async (key) => {
+          try {
+            const savedOrder =
+              localStorage.getItem(key);
+
+            if (!savedOrder) {
+              return null;
+            }
+
+            const orderAccess = JSON.parse(
+              savedOrder
+            ) as {
+              orderId?: number;
+              accessToken?: string;
+            };
+
+            if (
+              !orderAccess.orderId ||
+              !orderAccess.accessToken
+            ) {
+              return null;
+            }
+
+            const response = await fetch(
+              `/api/orders/by-phone/${encodeURIComponent(cleanPhone)}`,
+              {
+                method: "GET",
+                headers: {
+                  "x-order-token":
+                    orderAccess.accessToken,
+                },
+                cache: "no-store",
+              }
+            );
+
+            if (!response.ok) {
+              return null;
+            }
+
+            const data =
+              await response.json();
+
+            if (
+              !data.success ||
+              !Array.isArray(data.orders)
+            ) {
+              return null;
+            }
+
+            return data.orders[0] ?? null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const validOrders = results
+        .filter(
+          (order): order is Order =>
+            order !== null
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() -
+            new Date(a.createdAt).getTime()
+        );
+
+      if (validOrders.length === 0) {
+        setError(
+          "Aucune commande trouvée pour ce numéro sur cet appareil."
+        );
+        return;
+      }
+
+      setOrders(validOrders);
     } catch {
       setError(
         "Impossible de contacter le serveur. Vérifiez que SamaAchat est bien lancé."
@@ -94,10 +179,49 @@ export default function CommandesPage() {
     setError("");
 
     try {
+      const savedOrder = localStorage.getItem(
+        `samaachat_order_${orderId}`
+      );
+
+      if (!savedOrder) {
+        setError(
+          "Code d'accès de la commande introuvable sur cet appareil."
+        );
+        return;
+      }
+
+      let orderAccess: {
+        orderId: number;
+        accessToken: string;
+      };
+
+      try {
+        orderAccess = JSON.parse(
+          savedOrder
+        );
+      } catch {
+        setError(
+          "Code d'accès de la commande invalide."
+        );
+        return;
+      }
+
+      if (
+        orderAccess.orderId !== orderId ||
+        !orderAccess.accessToken
+      ) {
+        setError(
+          "Accès à la commande non autorisé."
+        );
+        return;
+      }
+
       const response = await fetch("/api/payments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-order-token":
+            orderAccess.accessToken,
         },
         body: JSON.stringify({
           orderId,
@@ -184,7 +308,7 @@ export default function CommandesPage() {
         </h1>
 
         <p className="mt-2 text-slate-500">
-          Entrez votre numéro de téléphone pour retrouver vos commandes.
+          Entrez votre numéro de téléphone pour retrouver les commandes enregistrées sur cet appareil.
         </p>
 
         <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm">

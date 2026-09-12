@@ -133,10 +133,46 @@ function ConfirmationContent() {
     setError("");
 
     try {
+      const savedOrder = localStorage.getItem(
+        `samaachat_order_${orderId}`
+      );
+
+      if (!savedOrder) {
+        setError(
+          "Accès à la commande non autorisé."
+        );
+        return;
+      }
+
+      let orderAccess: {
+        orderId: number;
+        accessToken: string;
+      };
+
+      try {
+        orderAccess = JSON.parse(savedOrder);
+      } catch {
+        setError(
+          "Accès à la commande non autorisé."
+        );
+        return;
+      }
+
+      if (
+        orderAccess.orderId !== Number(orderId) ||
+        !orderAccess.accessToken
+      ) {
+        setError(
+          "Accès à la commande non autorisé."
+        );
+        return;
+      }
+
       const response = await fetch("/api/payments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-order-token": orderAccess.accessToken,
         },
         body: JSON.stringify({
           orderId: Number(orderId),

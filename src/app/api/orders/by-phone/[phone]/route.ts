@@ -26,27 +26,35 @@ export async function GET(
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        phone: cleanPhone,
-      },
-    });
+    // ---------------------------------------------------------
+    // 1. VÉRIFICATION DU TOKEN DE COMMANDE
+    // ---------------------------------------------------------
 
-    if (!user) {
+    const orderToken = request.headers.get(
+      "x-order-token"
+    );
+
+    if (!orderToken) {
       return NextResponse.json(
         {
           success: false,
-          error: "Commande introuvable.",
+          error:
+            "Accès aux commandes non autorisé.",
         },
-        { status: 404 }
+        { status: 403 }
       );
     }
 
-    const orders = await prisma.order.findMany({
+    // ---------------------------------------------------------
+    // 2. RECHERCHE DE LA COMMANDE PAR TOKEN
+    // ---------------------------------------------------------
+
+    const order = await prisma.order.findUnique({
       where: {
-        userId: user.id,
+        accessToken: orderToken,
       },
       include: {
+        user: true,
         campaign: {
           include: {
             product: true,
@@ -63,12 +71,38 @@ export async function GET(
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
     });
 
-    const formattedOrders = orders.map((order) => ({
+    if (!order) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Commande introuvable.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ---------------------------------------------------------
+    // 3. VÉRIFICATION DU NUMÉRO DE TÉLÉPHONE
+    // ---------------------------------------------------------
+
+    if (order.user.phone !== cleanPhone) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Accès à la commande non autorisé.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // ---------------------------------------------------------
+    // 4. FORMATAGE DE LA COMMANDE
+    // ---------------------------------------------------------
+
+    const formattedOrder = {
       id: order.id,
 
       product:
@@ -80,36 +114,59 @@ export async function GET(
       unitPrice: order.unitPrice,
       amount: order.amount,
 
-      finalUnitPrice: order.finalUnitPrice,
-      finalAmount: order.finalAmount,
+      finalUnitPrice:
+        order.finalUnitPrice,
+
+      finalAmount:
+        order.finalAmount,
 
       status: order.status,
 
       paymentStatus:
-        order.payment?.status ?? "PENDING",
+        order.payment?.status ??
+        "PENDING",
 
       createdAt: order.createdAt,
 
-      items: order.items.map((item) => ({
-        campaignId: item.campaignId,
-        product: item.campaign.product.name,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
-      })),
-    }));
+      items: order.items.map(
+        (item) => ({
+          campaignId:
+            item.campaignId,
+
+          product:
+            item.campaign.product.name,
+
+          quantity:
+            item.quantity,
+
+          unitPrice:
+            item.unitPrice,
+
+          amount:
+            item.amount,
+        })
+      ),
+    };
+
+    // ---------------------------------------------------------
+    // 5. RÉPONSE
+    // ---------------------------------------------------------
 
     return NextResponse.json({
       success: true,
-      orders: formattedOrders,
+      orders: [formattedOrder],
     });
   } catch (error) {
-    console.error("Erreur recherche commandes :", error);
+    console.error(
+      "Erreur recherche commandes :",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: "Impossible de récupérer les commandes.",
+        error:
+          "Impossible de récupérer les commandes.",
       },
       { status: 500 }
     );

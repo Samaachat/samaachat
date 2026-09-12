@@ -57,6 +57,7 @@ model PriceTier {
 
 model Order {
   id             Int         @id @default(autoincrement())
+  accessToken    String?     @unique
   userId         Int
   campaignId     Int
   quantity       Int
@@ -98,8 +99,8 @@ model Payment {
 }
 
 model Delivery {
-  id           Int            @id @default(autoincrement())
-  orderId      Int            @unique
+  id           Int      @id @default(autoincrement())
+  orderId      Int      @unique
   address      String
   deliveryDate DateTime?
   status       DeliveryStatus @default(PENDING)

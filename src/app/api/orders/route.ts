@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 
 type OrderItemInput = {
@@ -276,6 +277,12 @@ export async function POST(request: NextRequest) {
     const firstItem = validatedItems[0];
 
     /*
+     * Token secret permettant de prouver la possession
+     * de la commande.
+     */
+    const accessToken = crypto.randomBytes(32).toString("hex");
+
+    /*
      * Création de la commande dans une transaction.
      *
      * On re-vérifie la capacité des campagnes
@@ -354,6 +361,7 @@ export async function POST(request: NextRequest) {
           const order =
             await tx.order.create({
               data: {
+                accessToken,
                 userId: user.id,
 
                 /*
@@ -420,6 +428,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       orderId: result.id,
+      accessToken,
       amount: totalAmount,
     });
   } catch (error) {

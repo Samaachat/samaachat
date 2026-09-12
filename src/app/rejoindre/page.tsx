@@ -345,6 +345,32 @@ export default function RejoindrePage() {
       }
 
       /*
+       * La commande doit maintenant
+       * posséder son code d'accès privé.
+       */
+      if (!data.accessToken) {
+        setError(
+          "La commande a été créée mais son code d'accès est manquant."
+        );
+        return;
+      }
+
+      /*
+       * On sauvegarde le token localement.
+       *
+       * Il permettra ensuite au client
+       * d'accéder à sa commande sans exposer
+       * simplement son numéro de commande.
+       */
+      localStorage.setItem(
+        `samaachat_order_${data.orderId}`,
+        JSON.stringify({
+          orderId: data.orderId,
+          accessToken: data.accessToken,
+        })
+      );
+
+      /*
        * Commande créée :
        * on vide le panier.
        */

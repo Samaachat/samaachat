@@ -17,6 +17,15 @@ export async function GET(
       );
     }
 
+    const token = request.headers.get("x-order-token");
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Accès à la commande non autorisé." },
+        { status: 403 }
+      );
+    }
+
     const order = await prisma.order.findUnique({
       where: {
         id: orderId,
@@ -44,6 +53,13 @@ export async function GET(
       return NextResponse.json(
         { error: "Commande introuvable." },
         { status: 404 }
+      );
+    }
+
+    if (!order.accessToken || order.accessToken !== token) {
+      return NextResponse.json(
+        { error: "Accès à la commande non autorisé." },
+        { status: 403 }
       );
     }
 

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCampaignUnitPrice } from "@/lib/campaign-prices";
 
 type OrderItemInput = {
   campaignId: number;
@@ -17,7 +18,6 @@ export async function POST(request: NextRequest) {
     const name = String(body.name ?? "").trim();
     const phone = String(body.phone ?? "").trim();
     const address = String(body.address ?? "").trim();
-    const accessToken = crypto.randomBytes(32).toString("hex");
 
     const rawItems = Array.isArray(body.items) ? body.items : [];
 
@@ -221,22 +221,10 @@ export async function POST(request: NextRequest) {
       }
 
       /*
-       * Déterminer le prix à partir des paliers.
+       * Prix fixe du produit.
+       * Le prix envoyé par le navigateur est ignoré.
        */
-      const tier = campaign.priceTiers.find(
-        (priceTier) =>
-          item.quantity >= priceTier.minQuantity &&
-          item.quantity <= priceTier.maxQuantity
-      );
-
-      /*
-       * Si aucun palier ne correspond, on utilise
-       * le premier palier comme sécurité.
-       */
-      const unitPrice =
-        tier?.price ??
-        campaign.priceTiers[0]?.price ??
-        0;
+      const unitPrice = getCampaignUnitPrice(campaign.product.name);
 
       if (unitPrice <= 0) {
         return NextResponse.json(
@@ -353,10 +341,13 @@ export async function POST(request: NextRequest) {
               });
           }
 
+          const accessToken = crypto.randomBytes(32).toString("hex");
+
           const order =
             await tx.order.create({
               data: {
                 userId: user.id,
+                accessToken,
 
                 /*
                  * Compatibilité avec le modèle historique.

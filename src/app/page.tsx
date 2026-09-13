@@ -34,26 +34,11 @@ export default function Home() {
   function getCampaignImage(productName: string) {
     const name = productName.toLowerCase();
 
-    if (name.includes("riz")) {
-      return "/images/campagnes/riz-50kg.png";
-    }
-
-    if (name.includes("huile")) {
-      return "/images/campagnes/huile-5l.png";
-    }
-
-    if (name.includes("oignon")) {
-      return "/images/campagnes/oignon-25kg.png";
-    }
-
-    if (name.includes("sucre")) {
-      return "/images/campagnes/sucre-50kg.png";
-    }
-
-    if (
-      name.includes("pomme") ||
-      name.includes("terre")
-    ) {
+    if (name.includes("riz")) return "/images/campagnes/riz-50kg.png";
+    if (name.includes("huile")) return "/images/campagnes/huile-5l.png";
+    if (name.includes("oignon")) return "/images/campagnes/oignon-25kg.png";
+    if (name.includes("sucre")) return "/images/campagnes/sucre-50kg.png";
+    if (name.includes("pomme") || name.includes("terre")) {
       return "/images/campagnes/pomme-de-terre-25kg.png";
     }
 
@@ -288,29 +273,28 @@ export default function Home() {
                     )}
 
                     <div className="p-6 md:p-8">
-                      <div className="flex flex-col gap-5">
-                        <div className="text-center">
+                      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                        <div>
                           <p className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-green-800">
                             Campagne en cours
                           </p>
 
-                          <h3 className="mt-3 text-2xl font-black text-green-950 md:text-3xl">
+                          <h3 className="mt-2 text-2xl font-bold text-green-950">
                             {campaign.product.name}
                           </h3>
 
-                          <p className="mx-auto mt-2 max-w-xl text-gray-600">
+                          <p className="mt-2 text-gray-600">
                             {campaign.product.description}
                           </p>
                         </div>
 
-                        <div className="mx-auto w-full max-w-xs rounded-2xl bg-yellow-100 px-5 py-4 text-center">
+                        <div className="rounded-2xl bg-yellow-100 px-5 py-4 text-center">
                           <p className="text-sm font-semibold text-gray-600">
-                            Prix actuel
+                            Prix fixe
                           </p>
 
                           <p className="text-2xl font-extrabold text-green-950">
-                            {unitPrice.toLocaleString("fr-FR")}{" "}
-                            FCFA
+                            {unitPrice.toLocaleString("fr-FR")} FCFA
                           </p>
                         </div>
                       </div>
